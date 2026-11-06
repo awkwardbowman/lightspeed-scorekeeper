@@ -1,7 +1,7 @@
 # Lightspeed Scorekeeper — Design Specification
 
 Version: 2026-11-06, consolidated following merged PR #1, #2 and #3
-Status: Approved product requirements, deployed implementation, and pending live acceptance
+Status: Approved product requirements, deployed implementation, pending live acceptance, and approved management-page redesign awaiting implementation
 Scope: Lightspeed Saber Academy — Traditional fencing scorekeeper and event administration
 
 ## 1. Authority, references and implementation status
@@ -42,6 +42,16 @@ Automated database security, handler, bracket simulation and production build te
 - A referee pauses the match clock before scoring; time/target completion does not silently discard scoring state or skip a deliberate match report.
 - Records from historical matches and finalized events must survive user/fencer rename, preset change, team-roster change, bracket regeneration and future configuration edits.
 
+### 2A. Standard management record pages — Lookup / Create / Edit / Confirm (approved 2026-11-06; implementation pending)
+
+- A reusable navigation and interaction pattern applies to every management page for persistent records, starting with Users, Fencers, Teams, Match Presets, and Event record management. Adopt it for future CRUD entities. This does not turn live bout scoring, Run Event operations, read-only History reports, self-service Account settings, or shared Configuration into CRUD tables.
+- The entry/lookup page is for browsing records: a searchable, sortable and filterable table with appropriate read-only columns, record identity, affiliation/status and any useful read-only counts. Include archived or disabled records through explicit filters/toggles; normally show active records first. No inline New/Edit form, side-by-side editor, modal upsert, or editable cells on a table/report/aggregate view. It is acceptable to show row-level navigation actions.
+- Place a prominent "New [entity]" button above the table. Give each row quick, permission-appropriate Edit and Archive actions, and Restore (or comparable enable/disable) where applicable. For the Fencers table specifically, support searching, sorting, filtering by affiliation and archived status, and viewing notes on mouse hover; ensure the same notes can be accessed by keyboard focus or touch, not hover alone.
+- New opens a separate, dedicated "Create [entity]" page with blank/default fields. Edit opens a separate "Edit [entity]" page with the selected stable ID and prefilled fields. Make the mode unmistakable in the page title and primary button ("Create fencer" vs "Save changes"), not only in the navigation path. Provide a Cancel/Back action that does not save, and clear save-success/error feedback; return to the lookup and retain table search/sort/filter state where practical.
+- Archive opens a separate "Confirm archive [entity]" page rather than acting instantly or sharing the edit page. Identify the exact record, explain its absence from active selections and preservation of historical references, and offer explicit Confirm archive and Cancel choices. Do not delete the record. A restore action must also be deliberate and recognizable. Follow equivalent dedicated confirmation flow for deactivation of a user account, while retaining the stronger user-auth/sole-Admin safeguards.
+- Users follow the same collection/creation/edit navigation, but "New user" means an invitation by email, not a password or fencer creation. The existing invitation, account-role and Admin-only restrictions remain unchanged. Teams and Events follow the same lookup vs edit separation, with roster assignment or other relationship edits handled in dedicated pages rather than inside the collection table.
+- Reuse the pattern and consistent language/placement across entity types; retain the existing backend permissions, UUID identity, auditing, historical retention and domain-specific validation. This is an approved UI/UX change to implement later, not a claim that current pages already comply.
+
 ## 3. Page 1 — Account and Manage Users
 
 Approved current policy, superseding the old Admin-created-temporary-password/no-email design:
@@ -56,6 +66,7 @@ Approved current policy, superseding the old Admin-created-temporary-password/no
 - Profile display name is required and nonblank. The durable identity is the Supabase Auth UUID; email is a login/contact attribute. Audit account state and policy changes.
 - Disabled accounts, revoked sessions, unauthorized callers and unprovisioned Auth users must be denied by backend policies/functions. Keep the sole Admin protected.
 - The app must not expose service-role credentials or SMTP keys in frontend environment variables or the repository.
+- The Users management screen must follow §2A: a user lookup table and distinct Invite/Create User, Edit User and account-disable confirmation pages. The listing must not embed invitation or edit forms.
 
 Implementation: Account/authentication UI and trusted account endpoints are deployed. The owner has verified actual new-account invitations, acceptance/password setup and password reset using Brevo and existing production settings. No email configuration work remains. Admin invitation pause, disabled-user access controls and broader role/authorization behavior may still be included in the page-by-page acceptance walkthrough.
 
@@ -66,6 +77,7 @@ Implementation: Account/authentication UI and trusted account endpoints are depl
 - Historical registered-fencer displays resolve the current display name by UUID. Preserve match-time name snapshots for provenance and for generic unregistered participants.
 - One reserved generic Unregistered fencer identity represents manually typed standalone participants. A standalone match can have one or two unregistered participants, including identically typed names; store individual left/right typed names with the match. The generic record is not a personal stats profile and cannot be accidentally deleted.
 - Calculate completed-eligible wins, losses, ties, scoring breakdowns and match counts from authoritative match records and security-invoker PostgreSQL views rather than mutable fencer counters. Separate overall, event and standalone statistics. Ignore voided/ineligible match results and archived prior bracket generations; preserve audited historical visibility.
+- Fencer management must follow §2A: a searchable, sortable/filterable fencer table with hover/focus/touch notes, row Edit/Archive buttons and a top New Fencer button. Creation, editing and archive confirmation are separate pages, with visibly distinct Create vs Edit states.
 
 Implementation: Shared fencer CRUD and derived history/statistics are part of the initial Traditional build; verify actual filters, renames, archiving and stats in the user walkthrough.
 
@@ -77,6 +89,7 @@ Implementation: Shared fencer CRUD and derived history/statistics are part of th
 - Events may store a default compatible preset. A referee may choose a different preset for a phase or match, and adjust duration/target before start without altering the shared preset.
 - Store the effective match-time rule/timer/target snapshot and optional preset reference. Later preset edits/archival must not rewrite previously played matches.
 - Defer overtime, round structures and advanced scoring rules until those modes have confirmed designs.
+- Match Presets must follow §2A: a dedicated preset lookup/search/sort/filter table and separate Create Preset, Edit Preset and Confirm Archive Preset pages, replacing the combined selector/upsert view.
 
 Implementation: Shared Traditional presets, archival and match-level settings snapshots are deployed. Verify creation, selection, editing, archiving and history in the walkthrough.
 
@@ -104,6 +117,7 @@ Implementation: Traditional scoring, transactional saving, exclusive referee con
 - One fencer may be on multiple teams within an event. Future team bouts must explicitly identify which team each fencer represents on each side, retaining that team identity even when rosters change.
 - Events choose compatible default presets; a specific match/phase may override preset and effective settings while retaining a snapshot.
 - Reusable teams and per-event rosters can be managed now, but team-match scoring, team standings and Control Point play are NOT implemented. Do not present roster preparation as functional team fixtures.
+- Team and event record management must follow §2A, with list/lookup screens separate from Create/Edit/Archive confirmation pages. Keep event execution, fixture scheduling and live scoring operational workflows distinct.
 
 Implementation: Event records, status, registration and reusable team/event-roster preparation are deployed. Individual Traditional events are the initial executable format. Verify activation/completion/reopen/archives with real data.
 
@@ -144,6 +158,9 @@ Implementation: History, linked detail and statistics views are deployed. Valida
 Implementation: Shared keyboard mappings, secondary ranking configuration, team image sources and audits are deployed; validate real images, URL behavior and device keyboard interaction.
 
 ## 11. Outstanding work: active verification vs product decisions vs deferrals
+
+Approved management-page UX work awaiting implementation (not deployed and not intentionally deferred):
+- Apply §2A to Users, Fencers, Teams, Match Presets and other record-management pages: searchable/sortable/filterable lookup tables; notes accessible on hover/focus/touch; row navigation actions; separate labeled Create/Edit forms and dedicated Archive/deactivation confirmation screens. Existing mixed lookup/editor screens still need refactoring. No schema migration or deployment is authorized by recording this design.
 
 Active verification/operational follow-up (not new design scope):
 1. COMPLETED AND VERIFIED: The owner successfully completed a new-account invitation and password reset with the current production settings. No email-ready flag change, SMTP setup or old no-email hook restoration is required.
