@@ -10,8 +10,14 @@ Authentication is mandatory, including standalone matches. Active managers and A
 
 ## Validate
 
-- `npm test` runs a PostgreSQL 17 migration/security/scoring suite in disposable PGlite, plus tournament simulations for 2–128 entrants.
-- `npm run build` checks TypeScript and builds the Vite application.
+- `npm run test:smoke` runs the production build and critical match/tournament smoke tests.
+- `npm run test:changed -- --base=origin/main` selects suites from changed files; add `--browser` for relevant UI coverage.
+- `npm run test:select -- --scope=teams,images` selects feature tests, while `--only=images` explicitly overrides the baseline.
+- `npm run test:integration` runs the production build and all six non-browser suites.
+- `npm run test:full` also runs the Chromium browser suite (after `npx playwright install chromium`).
+- `npm test` retains the historical six-suite non-browser command; `npm run build` separately type-checks and bundles the app.
+
+See [docs/TESTING.md](docs/TESTING.md) for risk classes, level gates, affected-area rules, CI, and release verification.
 
 ## Release
 

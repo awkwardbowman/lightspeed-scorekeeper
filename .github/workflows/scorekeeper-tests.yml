@@ -1,0 +1,54 @@
+name: Scorekeeper selective tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      level:
+        description: "Test level (full includes Chromium browser checks)"
+        type: choice
+        required: true
+        default: full
+        options: [smoke, integration, full]
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with history for changed-file selection
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test changed areas on pull requests
+        if: github.event_name == 'pull_request'
+        run: npm run test:changed -- --base=origin/main
+
+      - name: Install Chromium for full regression
+        if: github.event_name == 'workflow_dispatch' && inputs.level == 'full'
+        run: npx playwright install --with-deps chromium
+
+      - name: Manual smoke
+        if: github.event_name == 'workflow_dispatch' && inputs.level == 'smoke'
+        run: npm run test:smoke
+
+      - name: Manual integration
+        if: github.event_name == 'workflow_dispatch' && inputs.level == 'integration'
+        run: npm run test:integration
+
+      - name: Manual full regression
+        if: github.event_name == 'workflow_dispatch' && inputs.level == 'full'
+        run: npm run test:full
