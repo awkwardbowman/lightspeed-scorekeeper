@@ -1,3 +1,5 @@
+import MatchLog from "./MatchLog";
+import { type Operation } from "./liveMatch";
 import { useState } from "react";
 import {
   type EventRecord,
@@ -15,6 +17,7 @@ import {
   useRows,
 } from "./ui";
 export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
+  const operations = useRows<Operation>("tMatchOperation");
   const events = useRows<EventRecord>("tEvent");
   const fencers = useRows<Fencer>("tFencer");
   const matches = useRows<MatchRow>("vMatchResults");
@@ -401,6 +404,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 downloadJson(`match-${match.id}.json`, {
                   match,
                   calls: calls.data.filter((c) => c.match_id === match.id),
+                  operations: operations.data.filter(
+                    (o) => o.match_id === match.id,
+                  ),
                   audit: audit.data.filter(
                     (a) =>
                       a.record_id === match.id ||
@@ -414,7 +420,14 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               Export full report
             </button>
           </div>
-          <h4>Scoring timeline</h4>
+          <h4>Audited match operations</h4>
+          <Notice error={operations.error} />
+          <MatchLog
+            operations={operations.data
+              .filter((o) => o.match_id === match.id)
+              .sort((a, b) => a.sequence - b.sequence)}
+          />
+          <h4>Original calls (including reversals)</h4>
           <div className="table-wrap">
             <table>
               <thead>

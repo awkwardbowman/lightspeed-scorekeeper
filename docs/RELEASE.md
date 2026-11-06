@@ -1,3 +1,30 @@
+# Management and match redesign — PR #5 (prepared, not deployed)
+
+This release requires `20261106204518_match_redesign.sql` BEFORE the new client. It preserves existing matches/calls and adds the operation ledger and new settings. The owner has already verified email invitation and password recovery in production; do not repeat obsolete SMTP activation steps from historical sections below.
+
+1. Review the migration and PR. Capture the current deployed revision and database backup/restore options. Confirm no bouts are actively being controlled during rollout; legacy running snapshots are converted to paused while preserving their last recorded remaining time.
+2. Apply the additive migration using the normal authorized hosted migration workflow. This build has NOT applied it. Confirm `tMatchOperation` RLS/grants, `match_command` availability, protected views, initial Safety/Power reasons and 60-second overtime setting.
+3. Deploy the reviewed client branch after the schema is ready. Older clients attempting to change ledger-enabled matches receive a reload error. Keep the ledger and its rows on rollback; do not drop tables or rewrite historical calls. Roll back the client first if needed, understanding that old clients cannot safely control ledger-enabled bouts.
+4. Verify hosted sign-in and Management/Admin permissions; create/edit/archive/restore records; confirm both registered and unregistered prep; run paused-only scoring and automatic finalization; exercise a card, reversal, Admin score/time/target edit, report and refresh. Verify browser/server clock synchronization on the actual hosting environment.
+5. Verify one-controller-per-bout conflicts on two devices, explicit expired-claim recovery, lost-response retry, event disciplinary history, overtime first-score completion, unresolved scoreless overtime, corrected standings and frozen event results. Confirm played-descendant winner corrections are rejected.
+6. Record the deployed SHA and hosted acceptance separately from local test results. Keep the shared design Doc and `docs/DESIGN.md` synchronized with the actual release status.
+
+Local validation:
+
+```sh
+npm ci
+npm run build
+npm test
+npx playwright install chromium
+npm run test:browser
+# Alternatively use an existing Chromium:
+CHROMIUM_PATH=/usr/bin/chromium npm run test:browser
+```
+
+The browser suite starts a local Vite server on port 5187 and uses Auth/HTTP fixtures backed by real disposable PostgreSQL functions and RLS. It does not contact production. Screenshots go to ignored `test-results/`.
+
+---
+
 # Email invitation release — November 6, 2026
 
 Prepared against production main `1384493fe4353dd8337d9883552aff43e9eafef2`. This section supersedes the historical initial-release procedure below.

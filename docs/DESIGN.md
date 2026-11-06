@@ -1,7 +1,7 @@
 # Lightspeed Scorekeeper — Design Specification
 
 Version: 2026-11-06, consolidated following merged PR #1, #2 and #3
-Status: Approved product requirements, deployed implementation, pending live acceptance, and approved management-page plus Match Prep/Live Match redesigns awaiting implementation
+Status: PRs #1–#3 deployed; management-page and Traditional match redesign implemented and locally verified in draft PR #5, pending merge, hosted migration and deployment. See §6G–6H for the latest decisions and implementation status.
 Scope: Lightspeed Saber Academy — Traditional fencing scorekeeper and event administration
 
 ## 1. Authority, references and implementation status
@@ -42,7 +42,7 @@ Automated database security, handler, bracket simulation and production build te
 - A referee pauses the match clock before scoring; time/target completion does not silently discard scoring state or skip a deliberate match report.
 - Records from historical matches and finalized events must survive user/fencer rename, preset change, team-roster change, bracket regeneration and future configuration edits.
 
-### 2A. Standard management record pages — Lookup / Create / Edit / Confirm (approved 2026-11-06; implementation pending)
+### 2A. Standard management record pages — Lookup / Create / Edit / Confirm (implemented in draft PR #5; release pending)
 
 - A reusable navigation and interaction pattern applies to every management page for persistent records, starting with Users, Fencers, Teams, Match Presets, and Event record management. Adopt it for future CRUD entities. This does not turn live bout scoring, Run Event operations, read-only History reports, self-service Account settings, or shared Configuration into CRUD tables.
 - The entry/lookup page is for browsing records: a searchable, sortable and filterable table with appropriate read-only columns, record identity, affiliation/status and any useful read-only counts. Include archived or disabled records through explicit filters/toggles; normally show active records first. No inline New/Edit form, side-by-side editor, modal upsert, or editable cells on a table/report/aggregate view. It is acceptable to show row-level navigation actions.
@@ -50,7 +50,7 @@ Automated database security, handler, bracket simulation and production build te
 - New opens a separate, dedicated "Create [entity]" page with blank/default fields. Edit opens a separate "Edit [entity]" page with the selected stable ID and prefilled fields. Make the mode unmistakable in the page title and primary button ("Create fencer" vs "Save changes"), not only in the navigation path. Provide a Cancel/Back action that does not save, and clear save-success/error feedback; return to the lookup and retain table search/sort/filter state where practical.
 - Archive opens a separate "Confirm archive [entity]" page rather than acting instantly or sharing the edit page. Identify the exact record, explain its absence from active selections and preservation of historical references, and offer explicit Confirm archive and Cancel choices. Do not delete the record. A restore action must also be deliberate and recognizable. Follow equivalent dedicated confirmation flow for deactivation of a user account, while retaining the stronger user-auth/sole-Admin safeguards.
 - Users follow the same collection/creation/edit navigation, but "New user" means an invitation by email, not a password or fencer creation. The existing invitation, account-role and Admin-only restrictions remain unchanged. Teams and Events follow the same lookup vs edit separation, with roster assignment or other relationship edits handled in dedicated pages rather than inside the collection table.
-- Reuse the pattern and consistent language/placement across entity types; retain the existing backend permissions, UUID identity, auditing, historical retention and domain-specific validation. This is an approved UI/UX change to implement later, not a claim that current pages already comply.
+- Reuse the pattern and consistent language/placement across entity types; retain the existing backend permissions, UUID identity, auditing, historical retention and domain-specific validation. Implemented on the draft PR #5 branch; production pages remain unchanged until release.
 
 ## 3. Page 1 — Account and Manage Users
 
@@ -95,7 +95,7 @@ Implementation: Shared Traditional presets, archival and match-level settings sn
 
 ## 6. Page 4 — Run Single Match
 
-STATUS: APPROVED MATCH-SCREEN REDESIGN, implementation pending (2026-11-06). The existing deployed Scorekeeper combines match setup, live controls, a 3×3 category/point grid and a call-history section on one page. That layout is superseded by the two-stage flow below. Existing transactional saving, referee leasing and match history remain required. Do not describe this UI redesign as already shipped.
+STATUS: MATCH-SCREEN REDESIGN IMPLEMENTED IN DRAFT PR #5, not yet deployed (2026-11-06). The existing deployed Scorekeeper combines match setup, live controls, a 3×3 category/point grid and a call-history section on one page. That layout is superseded by the two-stage flow below. Existing transactional saving, referee leasing and match history remain required. Do not describe this UI redesign as already shipped.
 
 ### 6A. Match Prep — distinct preparation screen
 
@@ -193,6 +193,40 @@ Implementation dependencies / safe defaults to test:
 10. COLOR SCOPE AND LEGACY FALLBACK. The eventual fencer/team default colors, match-level overrides and persisted historical color snapshots are not yet in the schema. Until implemented, use clear neutral/left-right distinction and never rely on color alone in the score log. Future colors should not block the initial two-screen rebuild unless specifically prioritized.
 11. EVENT INTEGRATION. Reuse the live Traditional component for registered event bouts, but preserve group-tie and elimination-winner rules, manual bracket advancement, archived-generation exclusion and event finalization snapshots. Verify that match outcome overrides, Incomplete bouts and score adjustments cannot prematurely propagate bracket winners or corrupt completed standings.
 
+### 6G. PR setup decisions — 2026-11-06 (approved behavior and remaining proposals)
+
+This section supersedes conflicting earlier timer, completion, Admin Mode and card-design notes in §6A–6F and §11. These are requirements for implementation, not deployed behavior. Draft PR #5 tracks setup: https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/5.
+
+Confirmed:
+- Time expiry or reaching Score to Win automatically finalizes the result without navigating away from the scoreboard. The current referee can correct a finalized result through audited Admin Mode. Preserve prior completion versions and guard event-dependent changes.
+- Any authorized Management/Admin referee holding the match claim may use Admin Mode; account-level Admin is not required. Enforce this on the server.
+- Opening Manage pauses the clock. Closing it does not resume automatically.
+- Allow remaining-time increases beyond the originally selected preset duration so a wrong preset can be corrected in place. Preserve the original preset/settings provenance and audit before/after effective settings. Update the existing database duration cap deliberately; do not merely bypass client validation.
+- Admin Mode also offers up/down arrow controls for Score to Win. Adjust the match-specific target without modifying the shared preset. Paused-only, persisted and audited. No-target remains supported; exact arrow behavior at that boundary and target-change finalization behavior still need specification.
+- Cards are managed in Admin Mode, only while paused. Use a penalty popup identifying the sanctioned fencer, offering card choices, configurable reason tiles and referee-selected points awarded to the opponent. Initial reason categories: Safety and Power. Preserve card/reason/points/actor/time and reversal history independently of ordinary hit categories.
+- Show each fencer's prior card record from the SAME event while the penalty popup is open. Do not mix other events or standalone matches into that disciplinary record. Standalone matches have no event-wide card history.
+- CONFIRMED CARD COMMIT: The popup collects the card type, penalized fencer, reason and opponent point amount. Confirm atomically records the complete penalty and awards those points to the opponent, then closes on successful save. Cancel closes without recording a card or awarding points. This replaces next-hit arming; do not retain an armed card or double-award points. A failed save must not appear successful or lose the entered information.
+
+Unresolved:
+- Candidate card types named by the owner: Yellow, Red, Black and Double Black. Their official meaning, automatic disqualification effects and point restrictions are not confirmed. Do not invent sanctions from the names.
+- RESOLVED: Popup Confirm directly commits the card and selected opponent penalty points together; Cancel commits nothing.
+- CONFIRMED MATCH TYPE: Explicit Standard / Knockout classification, shown on the live scoreboard as part of the win condition; example: "Standard | First to 12 Points". A tied Knockout match enters overtime at time expiry rather than being finalized as a draw. Event phase context must select the appropriate type; do not confuse competition type with Traditional / Control Point scoring mode.
+- CONFIRMED OVERTIME: Knockout overtime is sudden death: first score wins, with a maximum of one minute (initial default; overtime-duration configuration remains in scope). Preserve the scoreboard and clearly identify overtime. The proposed paused entry/tap-to-start clock and lightly pulsing red border have not been explicitly confirmed; support reduced motion if the pulse is adopted. Behavior after a scoreless overtime minute is UNKNOWN and must not be invented. Stop the timer at zero, retain the unresolved tie and require an explicit resolution before any winner advances; this stop-and-flag handling is CONFIRMED by the owner as the interim behavior pending the judges’ official rule. Target-reached ties and corrections/reversals of an overtime-winning score still require precise lifecycle handling.
+- Whichever option is chosen, an unresolved knockout tie must not select an arbitrary advancing winner. Run Event should identify questionable results before generating a bracket or advancing dependent fixtures.
+
+
+### 6H. Implemented in draft PR #5 — 2026-11-06 (release pending)
+
+- Dedicated searchable/sortable/filterable lookup tables and separate Create/Edit/Archive/Restore confirmation screens for Fencers, Presets, Users, Events and Teams. User creation is email invitation; account disable/enable remains Admin-only. Event registration/status and event-specific team rosters use separate relationship pages. Lookup state survives navigation. Fencer IDs remain stable and notes work through expandable keyboard/touch controls and hover text.
+- Separate Match Prep and a responsive full-viewport Live Match, fixed +1 Indirect / +3 Clean / +5 Counter controls, accessible tap-to-toggle clock, and Standard / Knockout win-condition text. Event-linked bouts retain registered participants and phase-derived match type.
+- Manage pauses the server-backed clock. Admin Mode stages score, remaining-time and Score to Win arrows plus explicit result selection, then commits against one authoritative revision. Extra remaining time may exceed the preset without rewriting original duration. Explicit Incomplete preserves the score and excludes the result; manual completion derives the official result from effective scores.
+- The paused-only penalty popup records Yellow / Red / Black / Double Black as labels without inventing sanctions. Confirm atomically records the penalized fencer, configured reason and selected opponent points; Cancel records nothing. Initial reasons are Safety and Power. Both fencers’ same-event card records are shown, including recognizable reversed entries.
+- Time/target automatically finalizes while keeping the scoreboard visible. A tied Knockout expiry loads a stopped sudden-death overtime clock; the referee taps to start it. Overtime defaults to and is capped at 60 seconds, configurable downward. First score wins. Scoreless overtime stops with Winner unresolved and no advancement until explicit correction. A static red border identifies overtime and avoids motion effects.
+- Additive migration 20261106204518_match_redesign.sql adds an immutable operation ledger, server-owned actor/time attribution, per-operation original score-after snapshots, signed corrections, penalty metadata, before/after lifecycle snapshots, trusted clock deadlines and exact-request retry receipts. Reversals append evidence; old ordinary calls remain retained. Legacy calls are imported into the operation timeline, and unavailable original post-call snapshots are labeled explicitly rather than fabricated.
+- Live scores, reports, CSV, history, fencer aggregates and standings use the same effective totals and adjudication. Frozen event results remain immutable. Corrections to winners that already feed played descendants are rejected; sibling matches do not unnecessarily block correction. Unresolved knockout results never supply an arbitrary bracket winner.
+- Validation: production build; existing database/RLS, tournament and account-handler tests; new ledger/lifecycle/penalty/event tests; browser → test API → disposable PostgreSQL → UI flows with desktop/mobile layout, refresh, and a committed card with a deliberately lost response. Browser Auth and HTTP transport are fixtures; hosted Auth, PostgREST and multi-device production acceptance remain release checks.
+- Source implementation is in draft PR #5. No hosted schema has been applied and no production deployment has been performed in this build. Apply the reviewed additive migration before deploying the client. The canonical Google Doc records this branch/release distinction; docs/RELEASE.md contains the rollout procedure.
+
 ## 7. Page 5 — Manage Events and Teams
 
 - Each event has a name, Traditional or Control Point scoring mode, individual OR team competition format (not mixed in one event), optional dates, description and compatible default preset. Venue/organizer/event-image extras are outside the initial editor.
@@ -244,12 +278,12 @@ Implementation: Shared keyboard mappings, secondary ranking configuration, team 
 
 ## 11. Outstanding work: active verification vs product decisions vs deferrals
 
-Approved Match Prep / Live Match redesign awaiting implementation (not deployed, not a deferred feature):
+Match Prep / Live Match redesign implemented in draft PR #5 (not deployed; see §6H):
 - Implement §6A–6F: Match Prep, minimalist Live Match and the Manage/Admin Mode surface, including tap-to-toggle clock, fixed +1 Indirect/+3 Clean/+5 Counter quick-score controls, timer arrows, score correction up/down arrows, card-armed opponent scoring, durable colored/reversible log, and a CENTERED "Assign Winner" group of four buttons [← Left Victory] [Draw] [Incomplete] [Right Victory →] under the scoreboard, plus report/recovery integration. The deployed client still uses the original combined setup/live page and 3×3 grid.
 - Existing match duration/target/remaining columns suffice. Implementation additionally requires durable card provenance, actor-attributed call reversal metadata, per-call historical score snapshots, and a separate admin adjustment ledger or equivalent (the existing call points CHECK only accepts 1/3/5). The outcome/read-model layer must also stop marking every manually ended match incomplete and support explicit victory overrides. Consider later color snapshots. NO schema migration, code deployment or DB mutation is authorized by this document update.
 - Test paused-only scoring, timer corrections, penalty attribution on opponent score, signed admin delta on mode exit, audit-safe reversal and outcome override, refreshed playback, finalization/standings propagation and multi-device referee leases after implementation.
 
-Approved management-page UX work awaiting implementation (not deployed and not intentionally deferred):
+Management-page UX implemented in draft PR #5 (not deployed; see §6H):
 - Apply §2A to Users, Fencers, Teams, Match Presets and other record-management pages: searchable/sortable/filterable lookup tables; notes accessible on hover/focus/touch; row navigation actions; separate labeled Create/Edit forms and dedicated Archive/deactivation confirmation screens. Existing mixed lookup/editor screens still need refactoring. No schema migration or deployment is authorized by recording this design.
 
 Active verification/operational follow-up (not new design scope):

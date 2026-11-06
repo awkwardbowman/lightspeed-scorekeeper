@@ -102,6 +102,8 @@ export interface Team {
   is_archived: boolean;
 }
 export interface Configuration {
+  penalty_reasons: string[];
+  overtime_ms: number;
   id: boolean;
   tiebreakers: string[];
   key_mappings: Record<string, string>;

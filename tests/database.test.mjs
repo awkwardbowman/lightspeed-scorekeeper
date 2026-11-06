@@ -48,7 +48,7 @@ await reject('select public.claim_match($1,$2)',[m,exposed],/claimed/);
 await reject('update public."tTraditionalMatch" set lease_token=$1,referee_id=$2 where id=$3',[randomUUID(),other,m],/claim|Claim/);
 await auth(manager);await save([]);assert.equal((await q('select left_score from public."vMatchResults" where id=$1',[m]))[0].left_score,0,'undo reverses transactionally');
 assert.ok((await q('select * from public."tAudit" where record_id=$1',[call.id])).length>=2,'immutable call audit retained');
-await save([call]);match={...match,phase:'ended',endReason:'manual',endedAt:new Date().toISOString()};await save([call],true);assert.equal((await q('select outcome from public."vMatchResults" where id=$1',[m]))[0].outcome,'incomplete','manual stopping does not assume a result');
+await save([call]);match={...match,phase:'ended',endReason:'manual',endedAt:new Date().toISOString()};await save([call],true);assert.equal((await q('select outcome from public."vMatchResults" where id=$1',[m]))[0].outcome,'result','manual completion derives its official result from effective scores');
 match={...match,endReason:'time',remainingMs:0};await save([call],true);
 assert.equal((await q('select count(*)::int n from public."vFencerStatistics" where fencer_id=$1',[unreg]))[0].n,0);
 await root();await db.query('update public."tUser" set is_active=false where id=$1',[manager]);await auth(manager);
