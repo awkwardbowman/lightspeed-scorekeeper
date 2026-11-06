@@ -135,7 +135,7 @@ if (get("only") !== null) {
 }
 
 const browserSuggested = selected.has("browser");
-if (browserSuggested && !has("browser") && get("tier") !== "full") selected.delete("browser");
+if (browserSuggested && has("changed") && !has("browser")) selected.delete("browser");
 const chosen = suiteOrder.filter((name) => selected.has(name));
 console.log("Selection: " + source);
 console.log("Running: " + (chosen.join(", ") || "no tests (documentation only)"));
