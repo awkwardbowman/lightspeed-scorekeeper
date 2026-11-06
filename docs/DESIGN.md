@@ -232,13 +232,39 @@ Unresolved:
 - Each event has a name, Traditional or Control Point scoring mode, individual OR team competition format (not mixed in one event), optional dates, description and compatible default preset. Venue/organizer/event-image extras are outside the initial editor.
 - Authorized managers transition event status manually through Draft, Active, Completed and Archived, and may reopen Completed with an audit; reopening must not silently erase prior finalization/history.
 - Individual events register existing fencer UUIDs; generic Unregistered or free-text entries are not allowed in event matches.
-- Teams have reusable identities. Event participation is stored separately, and event-specific rosters are not inherited automatically from global team membership.
-- One fencer may be on multiple teams within an event. Future team bouts must explicitly identify which team each fencer represents on each side, retaining that team identity even when rosters change.
+- APPROVED TARGET (2026-11-06): Model a permanent TeamIdentity separately from event-specific Team instances. Each Team instance has its own ID, editable name, roster, optional one-event assignment, and shared TeamIdentityID for cross-event history. This supersedes the reusable-team/global-roster assumption for the future implementation; the deployed team schema remains unchanged until an authorized migration.
+- CONFIRMED: The same fencer may belong to multiple different teams in the same event; do not impose uniqueness on (EventID, FencerID). Reject duplicate (TeamID, FencerID) membership records for one team instance. Future team bouts must identify the exact Team instance representing each participant on each side, preserving attribution and match-time snapshots despite later roster edits.
 - Events choose compatible default presets; a specific match/phase may override preset and effective settings while retaining a snapshot.
-- Reusable teams and per-event rosters can be managed now, but team-match scoring, team standings and Control Point play are NOT implemented. Do not present roster preparation as functional team fixtures.
+- CURRENT DEPLOYMENT (distinct from the approved target): Reusable teams and per-event roster preparation are available. The TeamIdentity/Team-instance cloning workflow described in §7A is not yet implemented. Team-match scoring, team standings and Control Point play remain unimplemented; do not present roster preparation as functional team fixtures.
 - Team and event record management must follow §2A, with list/lookup screens separate from Create/Edit/Archive confirmation pages. Keep event execution, fixture scheduling and live scoring operational workflows distinct.
 
-Implementation: Event records, status, registration and reusable team/event-roster preparation are deployed. Individual Traditional events are the initial executable format. Verify activation/completion/reopen/archives with real data.
+### 7A. Team identities, instances, cloning, event assignment and historical rosters — APPROVED 2026-11-06; NOT IMPLEMENTED
+
+Purpose: Each participation of a continuing team in an event is a distinct Team instance, linked to a persistent TeamIdentity. Preserve exact historical rosters, independent names and event assignments without merging separate event entries.
+
+Data model:
+- TeamIdentity: durable UUID primary key and shared team-level attributes (including the shared image/logo); it is not itself an event entry. Archiving a Team instance never archives or destroys its TeamIdentity or sibling instances.
+- Team: distinct UUID primary key; required TeamIdentityID foreign key; optional ClonedFromTeamID self-reference for exact lineage; independently editable Name; optional EventID (NULL means Unassigned), and archive/audit metadata. One Team instance may be assigned to at most one event; create a clone for another event. Cloning retains TeamIdentityID but never reuses TeamID.
+- TeamFencer: independent membership UUID linking one Team instance to one Fencer UUID, with membership/audit history. A clone creates entirely new TeamFencer records, never copies membership row IDs. Uniqueness is per (TeamID, FencerID), NOT per (EventID, FencerID); a fencer may belong to multiple teams at one event.
+- Existing deployed reusable-team and event-roster relationships must be mapped into this target carefully during a separately approved additive migration; do not introduce two competing authoritative rosters or silently rewrite prior event/team references.
+
+Create and clone:
+- New Team creates a new TeamIdentity and Team instance. Clone Team offers a searchable lookup of previous Team instances (including archived historical instances where authorized), then atomically creates a new Team instance with a fresh TeamID, the source TeamIdentityID, ClonedFromTeamID, a copied initial name and fresh memberships for ONLY currently active/unarchived fencers from the source roster.
+- Archived/inactive fencers in the source roster are skipped, remain intact in the source history, and should be listed as skipped in the clone confirmation/result. No completed scores, matches, standings, audit logs or event assignment are copied. The new clone initially has no event assignment; management may optionally choose an eligible new event as part of creation.
+- Each clone's Name may be changed independently. Editing a descendant must never rename its source, siblings or TeamIdentity; preserve name-change audit and historical display/snapshots. Shared image/logo stays on TeamIdentity rather than on an individual event clone.
+
+Two-way event assignment:
+- On the Teams lookup/create/edit workflow, show eligible team-format events and the current assignment; allow assigning an unassigned instance during creation or later edit. Event management remains separate from the collection table under §2A.
+- In a team-format Event's dedicated team-assignment workflow, list currently assigned teams and offer Unassigned teams (EventID NULL), Create Team and Clone Previous Team. Assigning there updates the same authoritative relationship; the result must appear immediately in both event and team views. Do not offer a team already assigned to another event; clone it instead.
+- Only team-format events are valid assignments. Record assignment, unassignment and reassignment transitions in the audit. A specific policy for moving a team after it is referenced by played matches or finalized event history remains an implementation dependency; never silently orphan those references.
+
+Rosters, audits and histories:
+- CONFIRMED: Event team rosters are NEVER made read-only or historically locked, including once an event starts or completes. Authorized managers may add/remove memberships later, with durable actor, UTC timestamp, action and before/after membership state. Changes must be reconstructable as-of any earlier point, rather than overwrite the previous roster.
+- Do not retroactively change completed match attribution, participant/team identity, event-result/standings snapshots or the historical roster displayed for the relevant past time. Clearly distinguish current/editable roster from historical as-of roster; retain archived fencers and historical membership evidence.
+- Team History groups all Team instances via TeamIdentityID, shows each instance's name, assigned event, membership changes and resulting team statistics when those features exist. ClonedFromTeamID adds lineage beyond the shared identity.
+- No database migration, production deployment, or claim that this target is live is authorized by this design decision alone.
+
+Implementation: Event records, status, registration and existing reusable team/event-roster preparation are deployed. Individual Traditional events are the initial executable format. The §7A instance-and-clone refactor is an approved future change, not deployed. Verify activation/completion/reopen/archives with real data.
 
 ## 8. Page 6 — Run Event
 
@@ -271,7 +297,7 @@ Implementation: History, linked detail and statistics views are deployed. Valida
 - Both Admin and Management may edit ordinary application-wide configuration; this does not grant Management Admin-only account-policy or destructive privileges.
 - Global standings criteria: wins are always primary; current secondary supported choices are point differential and total points, reorderable globally by authorized managers. No selected default secondary priority is assumed here. Head-to-head is not presently implemented.
 - Keyboard mappings are one shared configuration, not per-account. Audit changes, prevent conflicts/reserved shortcuts and freeze mappings at the beginning of a match so later changes cannot surprise a referee mid-bout.
-- Each reusable team has one main image shared across its events. Support authenticated private uploads and HTTPS external image URLs; validate type/size and protect Storage access. No event-level logo override in initial scope.
+- Teams currently support a main image shared across event use. Under the approved §7A target this image belongs to TeamIdentity and is shared by all cloned Team instances. Support authenticated private uploads and HTTPS external image URLs; validate type/size and protect Storage access. No per-event clone logo override in initial scope.
 - Shared configuration modifications require an audit record with actor, timestamp, setting identifier and before/after state. Previously finalized standings retain the then-current configuration version.
 
 Implementation: Shared keyboard mappings, secondary ranking configuration, team image sources and audits are deployed; validate real images, URL behavior and device keyboard interaction.
@@ -300,6 +326,8 @@ B. Final global secondary tiebreak order: point differential versus total points
 C. Final timer-edit bounds and zero-time behavior, and whether Manage auto-pauses an active clock (safe UI default proposed in §6C). These are implementation details not yet explicitly confirmed.
 D. Color defaults/ownership for fencer vs team and default values before optional per-match overrides are introduced; preserve historical snapshots even if coloring is delivered in a later phase.
 E. Card rule detail: whether multiple simultaneous armed cards should replace or stack, and whether red/yellow colors have any point restrictions beyond the referee-chosen +1/+3/+5. Do not invent competition penalties.
+
+Approved team refactor, pending implementation (2026-11-06): §7A defines TeamIdentity, independently named event-specific Team instances, fresh TeamFencer records on cloning, active-fencers-only copying, multiple same-event team memberships, two-way Unassigned/event assignment and unlimited audited roster editing. Existing deployed reusable-team/event-roster behavior remains the current implementation. Pending engineering: review current schema and foreign keys, migrate existing relationships/history without loss, build both assignment entry points and cloning UX, reconstruct historical rosters from audits, protect completed result snapshots, and define safe reassignment after played matches. Do not infer a deployed feature from this approval.
 
 Intentionally deferred features (not initial Traditional-workflow blockers):
 - Control Point match scoring and team fixtures.
