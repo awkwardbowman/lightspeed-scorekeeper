@@ -144,3 +144,38 @@ export interface MatchRow {
   referee_id: string | null;
   revision: number;
 }
+
+export interface ImageAsset {
+  id: string;
+  storage_bucket: string;
+  storage_object_path: string;
+  display_name: string;
+  mime_type: string;
+  width: number;
+  height: number;
+  byte_size: number;
+  content_hash: string;
+  owner_id: string;
+  created_at: string;
+  is_archived: boolean;
+}
+export interface TeamInstance extends Team {
+  team_identity_id: string;
+  cloned_from_team_id: string | null;
+  event_id: string | null;
+  logo_image_asset_id: string | null;
+  team_color_hex: string;
+  revision: number;
+  assignment_locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  fencer_id: string;
+  added_at: string;
+  added_by: string;
+  removed_at: string | null;
+  removed_by: string | null;
+}

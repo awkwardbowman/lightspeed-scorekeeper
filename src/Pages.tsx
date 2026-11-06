@@ -1,3 +1,5 @@
+import Teams from "./Teams";
+import ImageLibrary from "./Images";
 import { RecordPage } from "./RecordPages";
 import { Account } from "./Management";
 import { RunEvent } from "./Events";
@@ -57,7 +59,7 @@ export default function Pages({ route }: { route: Route }) {
     case "/events":
       return <RecordPage entity="events" />;
     case "/events/teams":
-      return <RecordPage entity="teams" />;
+      return <Teams />;
     case "/run-event":
     case "/run-event/matches":
     case "/run-event/matches/run":
@@ -76,7 +78,7 @@ export default function Pages({ route }: { route: Route }) {
     case "/configuration/key-mappings":
       return <Configuration kind="key-mappings" />;
     case "/configuration/team-images":
-      return <Configuration kind="team-images" />;
+      return <ImageLibrary />;
     case "/single-match":
       return null;
   }

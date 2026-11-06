@@ -309,3 +309,21 @@ table small {
 
 .quick-scores button { border:1px solid #556173; border-radius:12px; background:#172333; color:#edf3fa; font-weight:700; }
 .quick-scores button:hover:not(:disabled) { background:#263b50; border-color:#9fc7eb; }
+
+/* Images keep their own color swatch; adjacent labels use neutral, readable text. */
+.team-badge { display:flex; align-items:center; gap:.75rem; min-width:12rem; }
+.team-logo-backdrop { display:grid; place-items:center; padding:.4rem; border-radius:.5rem; width:5rem; height:5rem; flex-shrink:0; }
+.team-logo { display:block; width:100%; max-width:12rem; height:7rem; object-fit:contain; }
+.team-logo-backdrop .team-logo { width:4rem; height:4rem; }
+.image-placeholder { display:block; background:#fff; color:#172033; padding:.25rem; font-size:.75rem; text-align:center; }
+.color-label { display:block; font-family:monospace; }
+.image-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,15rem),1fr)); gap:1rem; margin-top:1rem; }
+.image-gallery .card { min-width:0; overflow-wrap:anywhere; }
+.processed-preview { max-width:min(100%,24rem); max-height:24rem; object-fit:contain; background:repeating-conic-gradient(#eee 0% 25%,#fff 0% 50%) 50% / 20px 20px; }
+.image-upload { min-width:0; padding:1rem; }
+.roster-candidates { display:flex; flex-wrap:wrap; gap:.5rem; margin:1rem 0; }
+fieldset { min-width:0; border:1px solid var(--line,#cbd5e1); border-radius:.6rem; margin:1rem 0; padding:1rem; }
+.team-pages button, .image-pages button { min-height:44px; border-radius:.5rem; padding:.6rem .8rem; }
+.team-pages button:not(.primary), .image-pages button:not(.primary) { background:#233147; color:#e9edf6; border:1px solid #4b5e7b; }
+.team-pages .card li { overflow-wrap:anywhere; }
+.team-pages .card li button { margin:.25rem .5rem; }

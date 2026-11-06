@@ -1,3 +1,5 @@
+import { transform } from "esbuild";
+import WebPDecoder from "../supabase/functions/image-assets/vendor/webp_dec.js";
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
@@ -80,6 +82,120 @@ async function q(sql, args = []) {
 async function reject(sql, args = [], pattern) {
   await assert.rejects(() => db.query(sql, args), pattern);
 }
+// Run the actual trusted image handler and decoder; only transport/Storage
+// bytes are local fixtures. All registry/team commands execute real PostgreSQL.
+const imageObjects = new Map();
+const imageShared = await transform(
+  await readFile(
+    new URL("../supabase/functions/_shared/image.ts", import.meta.url),
+    "utf8",
+  ),
+  { loader: "ts", format: "esm" },
+);
+const { validateProcessed } = await import(
+  `data:text/javascript;base64,${Buffer.from(imageShared.code).toString("base64")}`
+);
+const imageSource = (
+  await readFile(
+    new URL("../supabase/functions/image-assets/index.ts", import.meta.url),
+    "utf8",
+  )
+)
+  .replace(
+    /import \{ createClient \} from ["'][^"']+["'];/,
+    "const createClient=deps.createClient;",
+  )
+  .replace(
+    /import \{ validateProcessed \} from ["'][^"']+["'];/,
+    "const validateProcessed=deps.validateProcessed;",
+  )
+  .replace(
+    /import WebPDecoder from ["'][^"']+["'];/,
+    "const WebPDecoder=deps.WebPDecoder;",
+  )
+  .replaceAll("import.meta.url", "deps.moduleUrl");
+const imageCode = (
+  await transform(imageSource, { loader: "ts", format: "esm" })
+).code;
+let imageHandler;
+const imageCaller = {
+  auth: {
+    getUser: async () => ({ data: { user: { id: admin } }, error: null }),
+  },
+  rpc: async () => ({
+    data: (await q("select public.account_status() p"))[0].p,
+    error: null,
+  }),
+};
+const imageService = {
+  rpc: async (name, args) => {
+    try {
+      const data = await db.transaction(async (tx) => {
+        await tx.exec("set local role service_role");
+        const entries = Object.entries(args);
+        return (
+          await tx.query(
+            `select public.${name}(${entries.map(([k], i) => `${k} => $${i + 1}`).join(",")}) result`,
+            entries.map(([, v]) => v),
+          )
+        ).rows[0].result;
+      });
+      return { data, error: null };
+    } catch (e) {
+      return { data: null, error: { message: e.message } };
+    }
+  },
+  storage: {
+    from: (bucket) => ({
+      upload: async (path, bytes) => {
+        const key = `${bucket}/${path}`;
+        if (imageObjects.has(key))
+          return { error: { message: "Already exists" } };
+        imageObjects.set(key, new Uint8Array(bytes));
+        return { error: null };
+      },
+      download: async (path) =>
+        imageObjects.has(`${bucket}/${path}`)
+          ? {
+              data: new Blob([imageObjects.get(`${bucket}/${path}`)]),
+              error: null,
+            }
+          : { error: { message: "Not found" } },
+    }),
+  },
+};
+new Function("Deno", "deps", imageCode)(
+  {
+    env: {
+      get: (name) =>
+        name === "SUPABASE_URL"
+          ? "https://test.invalid"
+          : name === "SUPABASE_SERVICE_ROLE_KEY"
+            ? "service"
+            : "anon",
+    },
+    serve: (fn) => (imageHandler = fn),
+    readFile: async () =>
+      new Uint8Array(
+        await readFile(
+          new URL(
+            "../supabase/functions/image-assets/vendor/webp_dec.wasm",
+            import.meta.url,
+          ),
+        ),
+      ),
+  },
+  {
+    createClient: (_url, key) =>
+      key === "service" ? imageService : imageCaller,
+    validateProcessed,
+    WebPDecoder,
+    moduleUrl: new URL(
+      "../supabase/functions/image-assets/index.ts",
+      import.meta.url,
+    ).href,
+  },
+);
 import { chromium } from "playwright";
 await auth(admin);
 // Test-only API transport executes the real migration/functions in disposable PostgreSQL.
@@ -130,13 +246,59 @@ try {
   const json = (v) =>
     JSON.stringify(v, (_, x) => (typeof x === "bigint" ? Number(x) : x));
   let dropNextPenalty = false;
+  let dropNextImage = false;
   await page.route("http://127.0.0.1:54321/**", async (route) => {
     const req = route.request(),
       url = new URL(req.url());
     const path = url.pathname.split("/");
     try {
       let result = null;
+      if (path[1] === "functions" && path[3] === "image-assets") {
+        const response = await imageHandler(
+          new Request(req.url(), {
+            method: "POST",
+            headers: req.headers(),
+            body: req.postDataBuffer(),
+          }),
+        );
+        if (dropNextImage && response.status === 200) {
+          dropNextImage = false;
+          await route.abort("failed");
+          return;
+        }
+        await route.fulfill({
+          status: response.status,
+          contentType: "application/json",
+          body: await response.text(),
+        });
+        return;
+      }
       const body = req.postDataJSON();
+      if (path[1] === "storage") {
+        if (path[4] === "sign") {
+          result = {
+            signedURL: `/object/sign/${path.slice(5).join("/")}?token=fixture`,
+          };
+        } else {
+          throw new Error("unsupported Storage fixture");
+        }
+        if (req.method() === "GET") {
+          const data = imageObjects.get(path.slice(5).join("/"));
+          if (!data) throw new Error("Image not found");
+          await route.fulfill({
+            status: 200,
+            contentType: "image/webp",
+            body: Buffer.from(data),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: json(result),
+        });
+        return;
+      }
       if (path[1] === "auth") {
         result = {
           user: {
@@ -284,244 +446,451 @@ try {
     },
     { id: admin, session: sessions.get(admin) },
   );
-  await page.goto("http://127.0.0.1:5187/#/fencers");
-  await page.getByRole("link", { name: "New fencer", exact: true }).click();
-  await page.getByLabel("Display name", { exact: true }).fill("Browser Fencer");
-  await page.getByLabel("Club / affiliation").fill("Academy");
+  if (!process.env.TEAM_ONLY) {
+    await page.goto("http://127.0.0.1:5187/#/fencers");
+    await page.getByRole("link", { name: "New fencer", exact: true }).click();
+    await page
+      .getByLabel("Display name", { exact: true })
+      .fill("Browser Fencer");
+    await page.getByLabel("Club / affiliation").fill("Academy");
+    await page
+      .getByLabel("Notes", { exact: true })
+      .fill("Keyboard and touch notes");
+    await page
+      .getByRole("button", { name: "Create fencer", exact: true })
+      .click();
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
+    assert.equal(
+      (
+        await q(
+          "select count(*)::int n from public.\"tFencer\" where display_name='Browser Fencer'",
+        )
+      )[0].n,
+      1,
+    );
+    await page
+      .getByRole("row")
+      .filter({ hasText: "Browser Fencer" })
+      .getByRole("link", { name: "Edit", exact: true })
+      .click();
+    await page
+      .getByLabel("Display name", { exact: true })
+      .fill("Renamed Browser Fencer");
+    await page
+      .getByRole("button", { name: "Save changes", exact: true })
+      .click();
+    await page
+      .getByRole("cell", { name: "Renamed Browser Fencer", exact: true })
+      .waitFor();
+    assert.equal(
+      (
+        await q(
+          "select count(*)::int n from public.\"tFencer\" where affiliation='Academy'",
+        )
+      )[0].n,
+      1,
+      "edit did not duplicate",
+    );
+    await page
+      .getByRole("row")
+      .filter({ hasText: "Renamed Browser Fencer" })
+      .getByRole("link", { name: "Archive", exact: true })
+      .click();
+    await page.getByRole("link", { name: "Cancel", exact: true }).click();
+    assert.equal(
+      (
+        await q(
+          "select is_archived from public.\"tFencer\" where affiliation='Academy'",
+        )
+      )[0].is_archived,
+      false,
+    );
+    await page
+      .getByRole("row")
+      .filter({ hasText: "Renamed Browser Fencer" })
+      .getByRole("link", { name: "Archive", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Confirm archive", exact: true })
+      .click();
+    await page
+      .getByRole("combobox", { name: /^Status/ })
+      .selectOption("inactive");
+    await page
+      .getByRole("cell", { name: "Renamed Browser Fencer", exact: true })
+      .waitFor();
+    for (const [route, entity] of [
+      ["presets", "preset"],
+      ["events", "event"],
+    ]) {
+      await page.goto(`http://127.0.0.1:5187/#/${route}`);
+      await page
+        .getByRole("link", { name: `New ${entity}`, exact: true })
+        .click();
+      await page.getByLabel("Name", { exact: true }).fill(`Browser ${entity}`);
+      await page
+        .getByRole("button", { name: `Create ${entity}`, exact: true })
+        .click();
+      await page
+        .getByRole("cell", { name: `Browser ${entity}`, exact: true })
+        .waitFor();
+      await page
+        .getByRole("row")
+        .filter({ hasText: `Browser ${entity}` })
+        .getByRole("link", { name: "Edit", exact: true })
+        .click();
+      await page.getByLabel("Name", { exact: true }).fill(`Edited ${entity}`);
+      await page
+        .getByRole("button", { name: "Save changes", exact: true })
+        .click();
+      await page
+        .getByRole("cell", { name: `Edited ${entity}`, exact: true })
+        .waitFor();
+    }
+    await page.goto("http://127.0.0.1:5187/#/users");
+    await page.getByRole("link", { name: "New user", exact: true }).click();
+    await page
+      .getByRole("heading", { name: "Invite user", exact: true })
+      .waitFor();
+    assert.equal(await page.getByLabel("Email", { exact: true }).count(), 1);
+    assert.equal(await page.locator("input[type=password]").count(), 0);
+    await page.getByRole("link", { name: "Cancel", exact: true }).click();
+    await page.goto("http://127.0.0.1:5187/#/single-match");
+    await page
+      .getByRole("heading", { name: "Match Prep", exact: true })
+      .waitFor();
+    await page.getByLabel("Participant name").nth(0).fill("Ari");
+    await page.getByLabel("Participant name").nth(1).fill("Jordan");
+    await page.getByLabel("Score to Win (blank for no target)").fill("12");
+    await page
+      .getByRole("button", { name: "Confirm match — timer stays stopped" })
+      .click();
+    await page.getByRole("button", { name: "03:00 — Start clock" }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "left indirect +1" }).count(),
+      1,
+    );
+    assert.equal(await page.locator(".quick-scores button").count(), 6);
+    await page.getByRole("button", { name: "left clean +3" }).click();
+    await page
+      .locator(".live-side.left .live-score")
+      .filter({ hasText: "3" })
+      .waitFor();
+    await page.getByRole("button", { name: "03:00 — Start clock" }).click();
+    await page.waitForFunction(() =>
+      document.querySelector(".clock-button")?.classList.contains("running"),
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "left indirect +1" }).isDisabled(),
+      true,
+    );
+    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Increase Left score", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Increase Remaining minutes", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Increase Score to Win", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Apply & close Admin Mode" })
+      .click();
+    await page
+      .getByRole("button", { name: "Admin Mode", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    await page.getByRole("button", { name: "Card penalty…" }).click();
+    await page.getByRole("button", { name: "Red", exact: true }).click();
+    await page.getByRole("button", { name: "Safety", exact: true }).click();
+    await page.getByLabel("Points awarded to Jordan").fill("3");
+    // Commit but lose its response, then retry with the same persisted request identity.
+    dropNextPenalty = true;
+    await page
+      .getByRole("button", { name: "Confirm card & award points" })
+      .click();
+    await page.getByRole("button", { name: "Retry pending save" }).click();
+    await page
+      .getByRole("button", { name: "Admin Mode", exact: true })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Close Manage", exact: true })
+      .click();
+    assert.equal(
+      await page.locator(".live-side.left .live-score").innerText(),
+      "4",
+    );
+    assert.equal(
+      await page.locator(".live-side.right .live-score").innerText(),
+      "3",
+    );
+    assert.equal(
+      (
+        await q(
+          "select count(*)::int n from public.\"tMatchOperation\" where kind='penalty'",
+        )
+      )[0].n,
+      1,
+    );
+    await page.screenshot({
+      path: new URL("../test-results/live-desktop.png", import.meta.url)
+        .pathname,
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: new URL("../test-results/live-mobile.png", import.meta.url)
+        .pathname,
+      fullPage: true,
+    });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      "mobile has no horizontal overflow",
+    );
+    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    await page.getByRole("button", { name: "Card penalty…" }).click();
+    await page.getByRole("button", { name: "Power", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal(
+      (
+        await q(
+          "select count(*)::int n from public.\"tMatchOperation\" where kind='penalty'",
+        )
+      )[0].n,
+      1,
+      "cancel awards nothing",
+    );
+    await page
+      .getByRole("button", { name: "Cancel / discard", exact: true })
+      .click();
+    page.once("dialog", (d) => d.accept());
+    await page
+      .getByRole("button", { name: "Match Complete", exact: true })
+      .click();
+    await page.waitForTimeout(300);
+    await page
+      .getByRole("button", { name: "Match Report", exact: true })
+      .click();
+    await page
+      .getByRole("heading", { name: "Match Report", exact: true })
+      .waitFor();
+    const official = (
+      await q("select * from public.\"vMatchResults\" where left_name='Ari'")
+    )[0];
+    assert.equal(official.left_score, 4);
+    assert.equal(official.right_score, 3);
+    assert.equal(official.winner_side, "left");
+    assert.ok(official.finalized_at);
+    await page.reload();
+    await page.getByRole("button", { name: "Manage", exact: true }).waitFor();
+    assert.equal(
+      await page.locator(".live-side.left .live-score").innerText(),
+      "4",
+    );
+    assert.deepEqual(errors, []);
+    console.log(
+      "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, desktop/mobile.",
+    );
+    await page.goto("http://127.0.0.1:5187/#/fencers");
+    await page.locator(".site-header").waitFor({ state: "visible" });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await q(
+    "insert into public.\"tEvent\"(id,owner_id,name,mode,competition_format) values($1,$2,'Browser team event','traditional','team')",
+    [randomUUID(), admin],
+  );
+  await q('insert into public."tFencer"(owner_id,display_name) values($1,$2)', [
+    admin,
+    "Team Browser Fencer",
+  ]);
+  const teamEvent = (
+    await q("select * from public.\"tEvent\" where name='Browser team event'")
+  )[0];
+  await page.goto("http://127.0.0.1:5187/#/events/teams");
+  await page.getByRole("link", { name: "New team", exact: true }).click();
+  await page.getByLabel("Team name", { exact: true }).fill("Browser team");
   await page
-    .getByLabel("Notes", { exact: true })
-    .fill("Keyboard and touch notes");
+    .getByLabel("Assigned event", { exact: true })
+    .selectOption(teamEvent.id);
+  await page.getByLabel("Color hex", { exact: true }).fill("#1a2b3c");
+  await page.getByRole("button", { name: "Choose logo", exact: true }).click();
   await page
-    .getByRole("button", { name: "Create fencer", exact: true })
+    .getByRole("button", { name: "Upload new image", exact: true })
+    .click();
+  const original = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 1600;
+    c.height = 800;
+    const x = c.getContext("2d");
+    x.fillStyle = "blue";
+    x.fillRect(100, 100, 1200, 500);
+    return c.toDataURL("image/png").split(",")[1];
+  });
+  await page.getByLabel("Choose image", { exact: true }).setInputFiles({
+    name: "Blue team.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(original, "base64"),
+  });
+  await page.getByAltText("Processed image preview", { exact: true }).waitFor();
+  await page.getByText(/512 × 256 px/).waitFor();
+  assert.equal(
+    (await q('select count(*)::int n from public."tImageAsset"'))[0].n,
+    0,
+    "preview approval happens before upload",
+  );
+  dropNextImage = true;
+  await page
+    .getByRole("button", { name: "Approve preview and upload", exact: true })
     .click();
   await page
-    .getByRole("cell", { name: "Browser Fencer", exact: true })
+    .getByRole("alert")
+    .filter({ hasText: /Failed to send|fetch|request/i })
     .waitFor();
+  await page.getByAltText("Processed image preview", { exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "Approve preview and upload", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Choose logo", exact: true })
+    .waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Create team", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "Browser team" }).waitFor();
+  const browserTeam = (
+    await q("select * from public.\"tTeam\" where name='Browser team'")
+  )[0];
+  assert.equal(browserTeam.event_id, teamEvent.id);
+  assert.equal(browserTeam.team_color_hex, "#1a2b3c");
+  const image = (await q('select * from public."tImageAsset"'))[0];
+  assert.equal(image.width, 512);
+  assert.equal(image.height, 256);
+  assert.equal(imageObjects.size, 1, "retry reuses one stored object");
+  await page
+    .getByRole("row")
+    .filter({ hasText: "Browser team" })
+    .getByRole("link", { name: "Roster", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Add Team Browser Fencer", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Remove", exact: true }).waitFor();
+  await page.goto(
+    `http://127.0.0.1:5187/#/events/teams?mode=clone&id=${browserTeam.id}`,
+  );
+  await page
+    .getByLabel("Team name", { exact: true })
+    .fill("Browser cloned team");
+  assert.equal(
+    await page.getByLabel("Assigned event", { exact: true }).inputValue(),
+    "",
+  );
+  await page
+    .getByRole("button", { name: "Confirm clone", exact: true })
+    .click();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "Browser cloned team" })
+    .waitFor();
+  const cloned = (
+    await q("select * from public.\"tTeam\" where name='Browser cloned team'")
+  )[0];
+  assert.notEqual(cloned.id, browserTeam.id);
+  assert.equal(cloned.team_identity_id, browserTeam.team_identity_id);
+  assert.equal(cloned.logo_image_asset_id, browserTeam.logo_image_asset_id);
   assert.equal(
     (
       await q(
-        "select count(*)::int n from public.\"tFencer\" where display_name='Browser Fencer'",
+        'select count(*)::int n from public."tTeamMember" where team_id=$1',
+        [cloned.id],
       )
     )[0].n,
     1,
   );
+  await page.goto(
+    `http://127.0.0.1:5187/#/events?mode=relationships&id=${teamEvent.id}`,
+  );
   await page
-    .getByRole("row")
-    .filter({ hasText: "Browser Fencer" })
-    .getByRole("link", { name: "Edit", exact: true })
+    .getByRole("button", { name: "Assign Browser cloned team", exact: true })
     .click();
   await page
-    .getByLabel("Display name", { exact: true })
-    .fill("Renamed Browser Fencer");
+    .getByRole("heading", { name: "Available unassigned teams", exact: true })
+    .waitFor();
+  await page.getByText("Saved.", { exact: true }).waitFor();
+  assert.equal(
+    (await q('select event_id from public."tTeam" where id=$1', [cloned.id]))[0]
+      .event_id,
+    teamEvent.id,
+  );
+  await page.goto(
+    `http://127.0.0.1:5187/#/events/teams?mode=edit&id=${cloned.id}`,
+  );
+  await page.getByLabel("Color hex", { exact: true }).fill("#eeffee");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page
-    .getByRole("cell", { name: "Renamed Browser Fencer", exact: true })
+    .getByRole("row")
+    .filter({ hasText: "Browser cloned team" })
     .waitFor();
   assert.equal(
     (
-      await q(
-        "select count(*)::int n from public.\"tFencer\" where affiliation='Academy'",
-      )
-    )[0].n,
-    1,
-    "edit did not duplicate",
+      await q('select team_color_hex from public."tTeam" where id=$1', [
+        browserTeam.id,
+      ])
+    )[0].team_color_hex,
+    "#1a2b3c",
   );
-  await page
-    .getByRole("row")
-    .filter({ hasText: "Renamed Browser Fencer" })
-    .getByRole("link", { name: "Archive", exact: true })
-    .click();
-  await page.getByRole("link", { name: "Cancel", exact: true }).click();
+  await page.screenshot({
+    path: new URL("../test-results/team-instances-desktop.png", import.meta.url)
+      .pathname,
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(
+    `http://127.0.0.1:5187/#/events/teams?mode=edit&id=${cloned.id}`,
+  );
+  await page.getByLabel("Team name", { exact: true }).waitFor();
   assert.equal(
-    (
-      await q(
-        "select is_archived from public.\"tFencer\" where affiliation='Academy'",
-      )
-    )[0].is_archived,
-    false,
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+    "mobile team editor stays within viewport",
   );
+  await page.screenshot({
+    path: new URL("../test-results/team-editor-mobile.png", import.meta.url)
+      .pathname,
+    fullPage: true,
+  });
+  await page.goto("http://127.0.0.1:5187/#/configuration/team-images");
+  await page.getByRole("heading", { name: "Blue team", exact: true }).waitFor();
   await page
-    .getByRole("row")
-    .filter({ hasText: "Renamed Browser Fencer" })
-    .getByRole("link", { name: "Archive", exact: true })
+    .getByRole("button", { name: "Archive Blue team", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Confirm archive", exact: true })
     .click();
   await page
-    .getByRole("combobox", { name: /^Status/ })
-    .selectOption("inactive");
-  await page
-    .getByRole("cell", { name: "Renamed Browser Fencer", exact: true })
-    .waitFor();
-  for (const [route, entity] of [
-    ["presets", "preset"],
-    ["events", "event"],
-    ["events/teams", "team"],
-  ]) {
-    await page.goto(`http://127.0.0.1:5187/#/${route}`);
-    await page
-      .getByRole("link", { name: `New ${entity}`, exact: true })
-      .click();
-    await page.getByLabel("Name", { exact: true }).fill(`Browser ${entity}`);
-    await page
-      .getByRole("button", { name: `Create ${entity}`, exact: true })
-      .click();
-    await page
-      .getByRole("cell", { name: `Browser ${entity}`, exact: true })
-      .waitFor();
-    await page
-      .getByRole("row")
-      .filter({ hasText: `Browser ${entity}` })
-      .getByRole("link", { name: "Edit", exact: true })
-      .click();
-    await page.getByLabel("Name", { exact: true }).fill(`Edited ${entity}`);
-    await page
-      .getByRole("button", { name: "Save changes", exact: true })
-      .click();
-    await page
-      .getByRole("cell", { name: `Edited ${entity}`, exact: true })
-      .waitFor();
-  }
-  await page.goto("http://127.0.0.1:5187/#/users");
-  await page.getByRole("link", { name: "New user", exact: true }).click();
-  await page
-    .getByRole("heading", { name: "Invite user", exact: true })
-    .waitFor();
-  assert.equal(await page.getByLabel("Email", { exact: true }).count(), 1);
-  assert.equal(await page.locator("input[type=password]").count(), 0);
-  await page.getByRole("link", { name: "Cancel", exact: true }).click();
-  await page.goto("http://127.0.0.1:5187/#/single-match");
-  await page
-    .getByRole("heading", { name: "Match Prep", exact: true })
-    .waitFor();
-  await page.getByLabel("Participant name").nth(0).fill("Ari");
-  await page.getByLabel("Participant name").nth(1).fill("Jordan");
-  await page.getByLabel("Score to Win (blank for no target)").fill("12");
-  await page
-    .getByRole("button", { name: "Confirm match — timer stays stopped" })
-    .click();
-  await page.getByRole("button", { name: "03:00 — Start clock" }).waitFor();
+    .getByLabel("Image status", { exact: true })
+    .selectOption("archived");
+  await page.getByRole("heading", { name: "Blue team", exact: true }).waitFor();
   assert.equal(
-    await page.getByRole("button", { name: "left indirect +1" }).count(),
-    1,
-  );
-  assert.equal(await page.locator(".quick-scores button").count(), 6);
-  await page.getByRole("button", { name: "left clean +3" }).click();
-  await page
-    .locator(".live-side.left .live-score")
-    .filter({ hasText: "3" })
-    .waitFor();
-  await page.getByRole("button", { name: "03:00 — Start clock" }).click();
-  await page.waitForFunction(() =>
-    document.querySelector(".clock-button")?.classList.contains("running"),
-  );
-  assert.equal(
-    await page.getByRole("button", { name: "left indirect +1" }).isDisabled(),
+    (
+      await q('select is_archived from public."tImageAsset" where id=$1', [
+        image.id,
+      ])
+    )[0].is_archived,
     true,
   );
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Increase Left score", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Increase Remaining minutes", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Increase Score to Win", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Apply & close Admin Mode" }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-  await page.getByRole("button", { name: "Card penalty…" }).click();
-  await page.getByRole("button", { name: "Red", exact: true }).click();
-  await page.getByRole("button", { name: "Safety", exact: true }).click();
-  await page.getByLabel("Points awarded to Jordan").fill("3");
-  // Commit but lose its response, then retry with the same persisted request identity.
-  dropNextPenalty = true;
-  await page
-    .getByRole("button", { name: "Confirm card & award points" })
-    .click();
-  await page.getByRole("button", { name: "Retry pending save" }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Close Manage", exact: true }).click();
-  assert.equal(
-    await page.locator(".live-side.left .live-score").innerText(),
-    "4",
-  );
-  assert.equal(
-    await page.locator(".live-side.right .live-score").innerText(),
-    "3",
-  );
-  assert.equal(
-    (
-      await q(
-        "select count(*)::int n from public.\"tMatchOperation\" where kind='penalty'",
-      )
-    )[0].n,
-    1,
-  );
-  await page.screenshot({
-    path: new URL("../test-results/live-desktop.png", import.meta.url).pathname,
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: new URL("../test-results/live-mobile.png", import.meta.url).pathname,
-    fullPage: true,
-  });
-  assert.ok(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-    "mobile has no horizontal overflow",
-  );
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-  await page.getByRole("button", { name: "Card penalty…" }).click();
-  await page.getByRole("button", { name: "Power", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  assert.equal(
-    (
-      await q(
-        "select count(*)::int n from public.\"tMatchOperation\" where kind='penalty'",
-      )
-    )[0].n,
-    1,
-    "cancel awards nothing",
-  );
-  await page
-    .getByRole("button", { name: "Cancel / discard", exact: true })
-    .click();
-  page.once("dialog", (d) => d.accept());
-  await page
-    .getByRole("button", { name: "Match Complete", exact: true })
-    .click();
-  await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "Match Report", exact: true }).click();
-  await page
-    .getByRole("heading", { name: "Match Report", exact: true })
-    .waitFor();
-  const official = (
-    await q("select * from public.\"vMatchResults\" where left_name='Ari'")
-  )[0];
-  assert.equal(official.left_score, 4);
-  assert.equal(official.right_score, 3);
-  assert.equal(official.winner_side, "left");
-  assert.ok(official.finalized_at);
-  await page.reload();
-  await page.getByRole("button", { name: "Manage", exact: true }).waitFor();
-  assert.equal(
-    await page.locator(".live-side.left .live-score").innerText(),
-    "4",
-  );
+  assert.equal(imageObjects.size, 1);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, desktop/mobile.",
+    "PASS team/image browser → real handler/decoder → PostgreSQL → UI: canvas optimization, preview approval, lost upload response, shared logos, clone rosters/lineage, independent colors, event-side assignment, archival retention and mobile layout.",
   );
-  await page.goto("http://127.0.0.1:5187/#/fencers");
-  await page.locator(".site-header").waitFor({ state: "visible" });
 } finally {
   await browser.close();
   dev.kill();
