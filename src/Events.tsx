@@ -1,0 +1,1126 @@
+import { useState } from "react";
+import { useAccount } from "./Auth";
+import {
+  db,
+  rpc,
+  write,
+  type EventRecord,
+  type Fencer,
+  type Preset,
+  type Standing,
+  type Team,
+  type MatchRow,
+} from "./data";
+import { bracketGraph } from "./tournament";
+import {
+  ArchiveFilter,
+  DeleteButton,
+  Intro,
+  Notice,
+  Search,
+  useAction,
+  useRows,
+} from "./ui";
+export function useEventSelection() {
+  const r = useRows<EventRecord>("tEvent");
+  const [id, setIdValue] = useState(
+    () => sessionStorage.getItem("event") ?? "",
+  );
+  function setId(id: string) {
+    sessionStorage.setItem("event", id);
+    setIdValue(id);
+  }
+  return { ...r, id, setId, event: r.data.find((e) => e.id === id) };
+}
+export function EventPicker({
+  events,
+  id,
+  onChange,
+  archived = false,
+}: {
+  events: EventRecord[];
+  id: string;
+  onChange: (id: string) => void;
+  archived?: boolean;
+}) {
+  return (
+    <label className="search">
+      Event
+      <select value={id} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Select an event</option>
+        {events
+          .filter((e) => archived || e.status !== "archived")
+          .map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name} · {e.status}
+            </option>
+          ))}
+      </select>
+    </label>
+  );
+}
+export function StandingsTable({ data }: { data: Standing[] }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fencer</th>
+            <th>W</th>
+            <th>L</th>
+            <th>D</th>
+            <th>Matches</th>
+            <th>Points</th>
+            <th>Difference</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((s) => (
+            <tr key={s.id}>
+              <td>{s.display_name}</td>
+              <td>{s.wins}</td>
+              <td>{s.losses}</td>
+              <td>{s.draws}</td>
+              <td>{s.matches}</td>
+              <td>{s.points_for}</td>
+              <td>{s.differential}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+export function Events() {
+  const { profile } = useAccount();
+  const r = useEventSelection();
+  const presets = useRows<Preset>("tMatchPreset");
+  const a = useAction(r.reload);
+  const [selected, setSelected] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [mode, setMode] = useState("traditional");
+  const [format, setFormat] = useState("individual");
+  const [preset, setPreset] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [search, setSearch] = useState("");
+  const [archived, setArchived] = useState(false);
+  const event = r.data.find((e) => e.id === selected);
+  function select(e?: EventRecord) {
+    setSelected(e?.id ?? "");
+    setName(e?.name ?? "");
+    setDescription(e?.description ?? "");
+    setMode(e?.mode ?? "traditional");
+    setFormat(e?.competition_format ?? "individual");
+    setPreset(e?.preset_id ?? "");
+    setStart(e?.starts_at?.slice(0, 16) ?? "");
+    setEnd(e?.ends_at?.slice(0, 16) ?? "");
+    if (e) r.setId(e.id);
+  }
+  return (
+    <>
+      <Intro title="Manage Events">
+        Create events, register competitors, and manage event-specific team
+        rosters.
+      </Intro>
+      <Notice error={r.error || presets.error} loading={r.loading} />
+      <div className="workspace-columns">
+        <section className="card">
+          <Search value={search} onChange={setSearch} />
+          <ArchiveFilter checked={archived} onChange={setArchived} />
+          <button className="primary" onClick={() => select()}>
+            New event
+          </button>
+          {r.data
+            .filter(
+              (e) =>
+                (archived || e.status !== "archived") &&
+                `${e.name} ${e.id}`
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+            )
+            .map((e) => (
+              <button
+                className="list-item"
+                key={e.id}
+                onClick={() => select(e)}
+              >
+                <strong>{e.name}</strong>
+                <small>
+                  {e.mode} · {e.competition_format} · {e.status}
+                </small>
+              </button>
+            ))}
+        </section>
+        <section className="card">
+          <form
+            className="editor"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void a.run(() =>
+                write(
+                  "tEvent",
+                  {
+                    name: name.trim(),
+                    description,
+                    mode,
+                    competition_format: format,
+                    preset_id: preset || null,
+                    starts_at: start
+                      ? new Date(start + "Z").toISOString()
+                      : null,
+                    ends_at: end ? new Date(end + "Z").toISOString() : null,
+                    ...(!selected ? { owner_id: profile.id } : {}),
+                  },
+                  selected || undefined,
+                ),
+              );
+            }}
+          >
+            <label>
+              Name
+              <input
+                required
+                maxLength={160}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            <label>
+              Scoring mode
+              <select
+                value={mode}
+                disabled={Boolean(event && event.status !== "draft")}
+                onChange={(e) => {
+                  setMode(e.target.value);
+                  setPreset("");
+                }}
+              >
+                <option value="traditional">Traditional</option>
+                <option value="control_point">
+                  Control Point (planning only)
+                </option>
+              </select>
+            </label>
+            <label>
+              Competition format
+              <select
+                value={format}
+                disabled={Boolean(event && event.status !== "draft")}
+                onChange={(e) => setFormat(e.target.value)}
+              >
+                <option value="individual">Individual</option>
+                <option value="team">Team</option>
+              </select>
+            </label>
+            <label>
+              Default preset
+              <select
+                value={preset}
+                onChange={(e) => setPreset(e.target.value)}
+              >
+                <option value="">Select preset</option>
+                {presets.data
+                  .filter((p) => !p.is_archived && p.mode === mode)
+                  .map((p) => (
+                    <option value={p.id} key={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Start (UTC, optional)
+              <input
+                type="datetime-local"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+              />
+            </label>
+            <label>
+              End (UTC, optional)
+              <input
+                type="datetime-local"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+            <button className="primary" disabled={a.busy}>
+              Save event
+            </button>
+          </form>
+          {event && (
+            <>
+              <p>Status: {event.status}</p>
+              <div className="button-row">
+                {["draft", "active", "completed", "archived"]
+                  .filter((s) => s !== event.status)
+                  .map((s) => (
+                    <button
+                      className="subtle"
+                      key={s}
+                      disabled={a.busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Change ${event.name} to ${s}? Completing freezes the current standings and ranking configuration.`,
+                          )
+                        )
+                          void a.run(() =>
+                            rpc("set_event_status", {
+                              p_event: event.id,
+                              p_status: s,
+                            }),
+                          );
+                      }}
+                    >
+                      {s === "active" && event.status === "completed"
+                        ? "Reopen"
+                        : s}
+                    </button>
+                  ))}
+                <a className="subtle" href="#/run-event">
+                  Run event
+                </a>
+                <a className="subtle" href="#/events/teams">
+                  Teams & registration
+                </a>
+                {profile.app_role === "admin" && (
+                  <DeleteButton
+                    table="tEvent"
+                    id={event.id}
+                    name={event.name}
+                    onDone={r.reload}
+                  />
+                )}
+              </div>
+              <Registration eventId={event.id} />
+            </>
+          )}
+          <Notice error={a.status} />
+        </section>
+      </div>
+    </>
+  );
+}
+export function Registration({ eventId }: { eventId: string }) {
+  const f = useRows<Fencer>("tFencer");
+  const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
+  const a = useAction(r.reload);
+  const [search, setSearch] = useState("");
+  return (
+    <section>
+      <h3>Registered competitors</h3>
+      <Search value={search} onChange={setSearch} />
+      <Notice error={r.error || f.error} />
+      <div className="selection-list">
+        {f.data
+          .filter(
+            (f) =>
+              !f.is_unregistered &&
+              !f.is_archived &&
+              f.display_name.toLowerCase().includes(search.toLowerCase()),
+          )
+          .map((f) => {
+            const exists = r.data.some(
+              (x) => x.event_id === eventId && x.fencer_id === f.id,
+            );
+            return (
+              <label className="check" key={f.id}>
+                <input
+                  type="checkbox"
+                  checked={exists}
+                  disabled={a.busy}
+                  onChange={() =>
+                    void a.run(async () => {
+                      const q = exists
+                        ? db()
+                            .from("tEventFencer")
+                            .delete()
+                            .eq("event_id", eventId)
+                            .eq("fencer_id", f.id)
+                        : db()
+                            .from("tEventFencer")
+                            .insert({ event_id: eventId, fencer_id: f.id });
+                      const { error } = await q;
+                      if (error) throw error;
+                    })
+                  }
+                />
+                {f.display_name} <small>{f.id.slice(0, 8)}</small>
+              </label>
+            );
+          })}
+      </div>
+      <Notice error={a.status} />
+    </section>
+  );
+}
+export function Teams() {
+  const { profile } = useAccount();
+  const e = useEventSelection();
+  const teams = useRows<Team>("tTeam");
+  const f = useRows<Fencer>("tFencer");
+  const links = useRows<{ event_id: string; team_id: string }>("tEventTeam");
+  const members = useRows<{
+    event_id: string;
+    team_id: string;
+    fencer_id: string;
+  }>("tEventTeamFencer");
+  const a = useAction(async () => {
+    await Promise.all([teams.reload(), links.reload(), members.reload()]);
+  });
+  const [name, setName] = useState("");
+  const [id, setId] = useState("");
+  const [archive, setArchive] = useState(false);
+  return (
+    <>
+      <Intro title="Event Teams & Registration">
+        Teams are reusable; membership is specific to the selected event.
+        Fencers may belong to multiple teams.
+      </Intro>
+      <EventPicker events={e.data} id={e.id} onChange={e.setId} />
+      <Notice error={e.error || teams.error || members.error || links.error} />
+      {e.event && (
+        <>
+          <section className="card">
+            <Registration eventId={e.id} />
+          </section>
+          <section className="card">
+            <ArchiveFilter checked={archive} onChange={setArchive} />
+            <form
+              className="editor"
+              onSubmit={(ev) => {
+                ev.preventDefault();
+                void a.run(() =>
+                  write("tTeam", {
+                    name,
+                    mode: e.event!.mode,
+                    owner_id: profile.id,
+                  }),
+                );
+              }}
+            >
+              <label>
+                New reusable team name
+                <input
+                  required
+                  maxLength={160}
+                  value={name}
+                  onChange={(ev) => setName(ev.target.value)}
+                />
+              </label>
+              <button className="primary" disabled={a.busy}>
+                Create team
+              </button>
+            </form>
+            <label>
+              Team
+              <select value={id} onChange={(ev) => setId(ev.target.value)}>
+                <option value="">Choose team</option>
+                {teams.data
+                  .filter(
+                    (t) =>
+                      t.mode === e.event!.mode && (archive || !t.is_archived),
+                  )
+                  .map((t) => (
+                    <option value={t.id} key={t.id}>
+                      {t.name}
+                      {t.is_archived ? " · Archived" : ""}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            {id && (
+              <>
+                <div className="button-row">
+                  <button
+                    className="subtle"
+                    disabled={
+                      a.busy ||
+                      links.data.some(
+                        (l) => l.event_id === e.id && l.team_id === id,
+                      )
+                    }
+                    onClick={() =>
+                      void a.run(async () => {
+                        const { error } = await db().from("tEventTeam").insert({
+                          event_id: e.id,
+                          team_id: id,
+                          owner_id: profile.id,
+                          mode: e.event!.mode,
+                        });
+                        if (error) throw error;
+                      })
+                    }
+                  >
+                    Add team to event
+                  </button>
+                  <button
+                    className="subtle"
+                    disabled={a.busy}
+                    onClick={() =>
+                      void a.run(() =>
+                        write(
+                          "tTeam",
+                          {
+                            is_archived: !teams.data.find((t) => t.id === id)
+                              ?.is_archived,
+                          },
+                          id,
+                        ),
+                      )
+                    }
+                  >
+                    Toggle team archive
+                  </button>
+                  <a href="#/configuration/team-images" className="subtle">
+                    Edit team image
+                  </a>
+                </div>
+                {links.data.some(
+                  (l) => l.event_id === e.id && l.team_id === id,
+                ) && (
+                  <>
+                    <h3>Roster for this event</h3>
+                    {f.data
+                      .filter((f) => !f.is_unregistered && !f.is_archived)
+                      .map((f) => {
+                        const exists = members.data.some(
+                          (m) =>
+                            m.event_id === e.id &&
+                            m.team_id === id &&
+                            m.fencer_id === f.id,
+                        );
+                        return (
+                          <label key={f.id} className="check">
+                            <input
+                              type="checkbox"
+                              checked={exists}
+                              disabled={a.busy}
+                              onChange={() =>
+                                void a.run(async () => {
+                                  const q = exists
+                                    ? db()
+                                        .from("tEventTeamFencer")
+                                        .delete()
+                                        .eq("event_id", e.id)
+                                        .eq("team_id", id)
+                                        .eq("fencer_id", f.id)
+                                    : db().from("tEventTeamFencer").insert({
+                                        event_id: e.id,
+                                        team_id: id,
+                                        fencer_id: f.id,
+                                      });
+                                  const { error } = await q;
+                                  if (error) throw error;
+                                })
+                              }
+                            />
+                            {f.display_name}
+                          </label>
+                        );
+                      })}
+                  </>
+                )}
+              </>
+            )}
+            <Notice error={a.status} />
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+interface Phase {
+  id: string;
+  event_id: string;
+  name: string;
+  kind: string;
+  position: number;
+  preset_id: string | null;
+  is_archived: boolean;
+}
+interface Group {
+  id: string;
+  phase_id: string;
+  name: string;
+}
+interface Member {
+  group_id: string;
+  fencer_id: string;
+}
+interface Bracket {
+  id: string;
+  phase_id: string;
+  format: string;
+  is_archived: boolean;
+  graph: unknown;
+  created_at: string;
+}
+export function RunEvent() {
+  const { profile } = useAccount();
+  const e = useEventSelection();
+  const phases = useRows<Phase>("tEventPhase");
+  const groups = useRows<Group>("tEventGroup");
+  const members = useRows<Member>("tEventGroupFencer");
+  const entrants = useRows<{ event_id: string; fencer_id: string }>(
+    "tEventFencer",
+  );
+  const f = useRows<Fencer>("tFencer");
+  const matches = useRows<MatchRow>("vMatchResults");
+  const brackets = useRows<Bracket>("tBracket");
+  const presets = useRows<Preset>("tMatchPreset");
+  const [phase, setPhase] = useState("");
+  const [group, setGroup] = useState("");
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("group");
+  const [preset, setPreset] = useState("");
+  const [seeds, setSeeds] = useState<string[]>([]);
+  const [standing, setStanding] = useState<Standing[]>([]);
+  const [left, setLeft] = useState("");
+  const [right, setRight] = useState("");
+  const [archived, setArchived] = useState(false);
+  const a = useAction(async () => {
+    await Promise.all([
+      phases.reload(),
+      groups.reload(),
+      members.reload(),
+      matches.reload(),
+      brackets.reload(),
+      entrants.reload(),
+    ]);
+    if (e.id)
+      setStanding(
+        await rpc<Standing[]>("standings", {
+          p_event: e.id,
+          p_group: group || null,
+        }),
+      );
+  });
+  const ph = phases.data.find((p) => p.id === phase);
+  const registered = f.data.filter((f) =>
+    entrants.data.some((x) => x.event_id === e.id && x.fencer_id === f.id),
+  );
+  async function voidMatch(id: string) {
+    if (
+      window.confirm(
+        "Void this match? Its result will stop counting; calls and audit history are retained.",
+      )
+    )
+      await a.run(() => rpc("void_match", { p_id: id }));
+  }
+  const eventMatches = matches.data.filter(
+    (m) => m.event_id === e.id && (archived || (!m.is_archived && !m.is_void)),
+  );
+  function runMatch(m: MatchRow) {
+    sessionStorage.setItem("openMatch", m.id);
+    window.location.hash = "/single-match";
+  }
+  return (
+    <>
+      <Intro title="Run Event">
+        Assign groups manually, generate group fixtures, then select bracket
+        entrants in placement order.
+      </Intro>
+      <EventPicker
+        events={e.data}
+        id={e.id}
+        onChange={(id) => {
+          e.setId(id);
+          setPhase("");
+          setGroup("");
+          setSeeds([]);
+          setStanding([]);
+        }}
+      />
+      <Notice
+        error={
+          e.error ||
+          phases.error ||
+          matches.error ||
+          brackets.error ||
+          f.error ||
+          groups.error ||
+          members.error ||
+          entrants.error ||
+          presets.error
+        }
+      />
+      {e.event &&
+      (e.event.mode !== "traditional" ||
+        e.event.competition_format !== "individual") ? (
+        <section className="card">
+          <p>
+            Team match processing and Control Point rules are deferred. Team
+            rosters can be managed under Manage Events.
+          </p>
+        </section>
+      ) : (
+        e.event && (
+          <>
+            <section className="card">
+              <p>
+                {e.event.name} · {e.event.status}
+              </p>
+              {e.event.status !== "active" && (
+                <p>
+                  Activate or reopen the event under Manage Events before
+                  running matches.
+                </p>
+              )}
+              <Registration eventId={e.id} />
+              <h3>Competition phases</h3>
+              <form
+                className="editor inline-editor"
+                onSubmit={(ev) => {
+                  ev.preventDefault();
+                  void a.run(() =>
+                    write("tEventPhase", {
+                      event_id: e.id,
+                      name,
+                      kind,
+                      position:
+                        phases.data.filter((p) => p.event_id === e.id).length +
+                        1,
+                      preset_id: preset || null,
+                    }),
+                  );
+                }}
+              >
+                <label>
+                  Phase name
+                  <input
+                    required
+                    value={name}
+                    onChange={(ev) => setName(ev.target.value)}
+                  />
+                </label>
+                <label>
+                  Format
+                  <select
+                    value={kind}
+                    onChange={(ev) => setKind(ev.target.value)}
+                  >
+                    <option value="group">Group round robin</option>
+                    <option value="single">Single elimination</option>
+                    <option value="double">Double elimination</option>
+                  </select>
+                </label>
+                <label>
+                  Phase preset
+                  <select
+                    value={preset}
+                    onChange={(ev) => setPreset(ev.target.value)}
+                  >
+                    <option value="">Use event default</option>
+                    {presets.data
+                      .filter((p) => !p.is_archived && p.mode === "traditional")
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button className="primary" disabled={a.busy}>
+                  Add phase
+                </button>
+              </form>
+              <label>
+                Selected phase
+                <select
+                  value={phase}
+                  onChange={(ev) => {
+                    setPhase(ev.target.value);
+                    setGroup("");
+                    setSeeds([]);
+                  }}
+                >
+                  <option value="">Choose phase</option>
+                  {phases.data
+                    .filter((p) => p.event_id === e.id && !p.is_archived)
+                    .sort((a, b) => a.position - b.position)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.position}. {p.name} · {p.kind}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {ph?.kind === "group" && (
+                <>
+                  <form
+                    className="editor inline-editor"
+                    onSubmit={(ev) => {
+                      ev.preventDefault();
+                      void a.run(() =>
+                        write("tEventGroup", { phase_id: phase, name }),
+                      );
+                    }}
+                  >
+                    <label>
+                      New group name
+                      <input
+                        required
+                        value={name}
+                        onChange={(ev) => setName(ev.target.value)}
+                      />
+                    </label>
+                    <button className="subtle" disabled={a.busy}>
+                      Add group
+                    </button>
+                  </form>
+                  <label>
+                    Group
+                    <select
+                      value={group}
+                      onChange={(ev) => {
+                        setGroup(ev.target.value);
+                        setStanding([]);
+                      }}
+                    >
+                      <option value="">All groups / event standings</option>
+                      {groups.data
+                        .filter((g) => g.phase_id === phase)
+                        .map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  {group && (
+                    <div className="selection-list">
+                      {registered.map((f) => {
+                        const exists = members.data.some(
+                          (m) => m.group_id === group && m.fencer_id === f.id,
+                        );
+                        return (
+                          <label className="check" key={f.id}>
+                            <input
+                              type="checkbox"
+                              disabled={a.busy}
+                              checked={exists}
+                              onChange={() =>
+                                void a.run(async () => {
+                                  const { error } = await (exists
+                                    ? db()
+                                        .from("tEventGroupFencer")
+                                        .delete()
+                                        .eq("group_id", group)
+                                        .eq("fencer_id", f.id)
+                                    : db().from("tEventGroupFencer").insert({
+                                        group_id: group,
+                                        fencer_id: f.id,
+                                      }));
+                                  if (error) throw error;
+                                })
+                              }
+                            />
+                            {f.display_name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="button-row">
+                <button
+                  className="subtle"
+                  disabled={a.busy}
+                  onClick={() =>
+                    void a.run(async () =>
+                      setStanding(
+                        await rpc<Standing[]>("standings", {
+                          p_event: e.id,
+                          p_group: group || null,
+                        }),
+                      ),
+                    )
+                  }
+                >
+                  Refresh standings
+                </button>
+              </div>
+              <StandingsTable data={standing} />
+              <p className="muted">
+                Wins rank first. Equal configured criteria remain tied;
+                displayed name order does not award advancement. Management
+                chooses qualifiers.
+              </p>
+              {ph && (
+                <>
+                  <h3>
+                    {ph.kind === "group"
+                      ? "Generate group fixtures"
+                      : "Bracket placements"}
+                  </h3>
+                  {ph.kind !== "group" && (
+                    <>
+                      <div className="button-row">
+                        {registered
+                          .filter((f) => !seeds.includes(f.id))
+                          .map((f) => (
+                            <button
+                              className="subtle"
+                              key={f.id}
+                              onClick={() => setSeeds([...seeds, f.id])}
+                            >
+                              Add {f.display_name}
+                            </button>
+                          ))}
+                      </div>
+                      <ol>
+                        {seeds.map((id, i) => (
+                          <li key={id}>
+                            {f.data.find((f) => f.id === id)?.display_name}{" "}
+                            <button
+                              className="icon-btn"
+                              onClick={() =>
+                                setSeeds(seeds.filter((x) => x !== id))
+                              }
+                            >
+                              Remove
+                            </button>
+                            {i > 0 && (
+                              <button
+                                className="icon-btn"
+                                onClick={() => {
+                                  const s = [...seeds];
+                                  [s[i - 1], s[i]] = [s[i], s[i - 1]];
+                                  setSeeds(s);
+                                }}
+                              >
+                                Move up
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                  <button
+                    className="primary"
+                    disabled={
+                      a.busy ||
+                      e.event.status !== "active" ||
+                      (ph.kind === "group" && !group)
+                    }
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          "Generate fresh matches? Any prior generation for this bracket/group, including completed results, will be archived.",
+                        )
+                      )
+                        return;
+                      void a.run(async () => {
+                        const ids =
+                          ph.kind === "group"
+                            ? members.data
+                                .filter((m) => m.group_id === group)
+                                .map((m) => m.fencer_id)
+                            : seeds;
+                        const graph =
+                          ph.kind === "group"
+                            ? {
+                                entrants: ids,
+                                nodes: ids.flatMap((_, i) =>
+                                  ids.slice(i + 1).map((_, j) => ({
+                                    key: `G${i}.${i + j + 1}`,
+                                    left: { seed: i },
+                                    right: { seed: i + j + 1 },
+                                  })),
+                                ),
+                              }
+                            : bracketGraph(ids, ph.kind === "double");
+                        const b = await rpc<string>("generate_bracket", {
+                          p_phase: phase,
+                          p_graph: graph,
+                          p_format: ph.kind,
+                          p_group: ph.kind === "group" ? group : null,
+                        });
+                        await rpc("sync_bracket", { p_bracket: b });
+                      });
+                    }}
+                  >
+                    Generate / regenerate
+                  </button>
+                </>
+              )}
+              <h3>Manual pairing</h3>
+              <div className="editor inline-editor">
+                <label>
+                  Left
+                  <select
+                    value={left}
+                    onChange={(ev) => setLeft(ev.target.value)}
+                  >
+                    <option value="">Choose fencer</option>
+                    {registered.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Right
+                  <select
+                    value={right}
+                    onChange={(ev) => setRight(ev.target.value)}
+                  >
+                    <option value="">Choose fencer</option>
+                    {registered.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="subtle"
+                  disabled={
+                    a.busy ||
+                    !left ||
+                    !right ||
+                    left === right ||
+                    e.event.status !== "active"
+                  }
+                  onClick={() =>
+                    void a.run(async () => {
+                      const p = presets.data.find(
+                        (p) => p.id === (ph?.preset_id ?? e.event!.preset_id),
+                      );
+                      if (!p) throw new Error("Choose a default preset first");
+                      await write("tTraditionalMatch", {
+                        owner_id: profile.id,
+                        event_id: e.id,
+                        event_name: e.event!.name,
+                        left_fencer_id: left,
+                        right_fencer_id: right,
+                        left_name: f.data.find((f) => f.id === left)!
+                          .display_name,
+                        right_name: f.data.find((f) => f.id === right)!
+                          .display_name,
+                        phase_id: phase || null,
+                        group_id: group || null,
+                        preset_id: p.id,
+                        duration_ms: p.duration_ms,
+                        remaining_ms: p.duration_ms,
+                        target_score: p.target_score,
+                      });
+                    })
+                  }
+                >
+                  Schedule match
+                </button>
+              </div>
+              <Notice error={a.status} />
+            </section>
+            <section className="card">
+              <h3>Matches & bracket generations</h3>
+              <ArchiveFilter checked={archived} onChange={setArchived} />
+              {brackets.data
+                .filter(
+                  (b) =>
+                    phases.data.some(
+                      (p) => p.id === b.phase_id && p.event_id === e.id,
+                    ) &&
+                    (archived || !b.is_archived),
+                )
+                .map((b) => (
+                  <div className="button-row" key={b.id}>
+                    <span>
+                      {b.format} · {b.id.slice(0, 8)}
+                      {b.is_archived ? " · Archived" : ""}
+                    </span>
+                    {!b.is_archived && (
+                      <button
+                        className="subtle"
+                        disabled={a.busy}
+                        onClick={() =>
+                          void a.run(() =>
+                            rpc("sync_bracket", { p_bracket: b.id }),
+                          )
+                        }
+                      >
+                        Advance resolved matches
+                      </button>
+                    )}
+                  </div>
+                ))}
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Slot</th>
+                      <th>Competitors</th>
+                      <th>Score</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eventMatches.map((m) => (
+                      <tr key={m.id}>
+                        <td>{m.slot_key ?? "Manual"}</td>
+                        <td>
+                          {m.current_left_name} / {m.current_right_name}
+                        </td>
+                        <td>
+                          {m.left_score}–{m.right_score}
+                        </td>
+                        <td>
+                          {m.is_archived
+                            ? "Archived"
+                            : m.is_void
+                              ? "Bye / void"
+                              : m.finalized_at
+                                ? "Final"
+                                : m.phase}
+                        </td>
+                        <td>
+                          <button
+                            className="subtle"
+                            disabled={
+                              m.is_archived ||
+                              m.is_void ||
+                              !m.left_fencer_id ||
+                              !m.right_fencer_id
+                            }
+                            onClick={() => runMatch(m)}
+                          >
+                            Open
+                          </button>
+                          {!m.is_archived && !m.is_void && (
+                            <button
+                              className="subtle"
+                              disabled={a.busy}
+                              onClick={() => void voidMatch(m.id)}
+                            >
+                              Void
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )
+      )}
+    </>
+  );
+}
