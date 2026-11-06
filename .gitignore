@@ -8,3 +8,5 @@ dist/
 
 *.tsbuildinfo
 supabase/.temp/
+
+test-results/

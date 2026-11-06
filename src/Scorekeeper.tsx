@@ -1,899 +1,1346 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount } from "./Auth";
-import { useRows, Notice } from "./ui";
-import { type Fencer, type Preset, type Configuration, message } from "./data";
-import { loadTraditionalMatch } from "./db/traditional";
-import useMatchSession from "./useMatchSession";
 import {
-  clockText,
-  countFor,
-  downloadCsv,
-  initialMatch,
-  POINT_VALUES,
-  SCORE_LABELS,
-  scoreFor,
-  targetReached,
-  uid,
-  type CallType,
-  type Match,
-  type PointValue,
-  type Side,
-} from "./match";
+  db,
+  message,
+  type Fencer,
+  type Preset,
+  type Configuration,
+} from "./data";
+import { claim } from "./db/traditional";
+import { useRows, Notice, downloadJson } from "./ui";
+import { clockText, uid } from "./match";
+import {
+  command,
+  loadLive,
+  loadOperations,
+  type LiveMatch,
+  type Operation,
+  operationLabel,
+} from "./liveMatch";
+import MatchLog from "./MatchLog";
 
-const STORAGE_KEY = "lightspeed-scorekeeper:v1";
-const TYPES: CallType[] = ["indirect", "clean", "counter"];
-function recover(userId: string): Match {
+type Side = "left" | "right";
+type Pending = {
+  id: string;
+  action: string;
+  data: Record<string, unknown>;
+  revision: number;
+};
+const key = (user: string) => `lightspeed-live:v2:${user}`;
+function stored(user: string): {
+  match: LiveMatch | null;
+  pending: Pending | null;
+} {
   try {
-    const value = localStorage.getItem(`${STORAGE_KEY}:${userId}`);
-    if (value) {
-      const stored = JSON.parse(value) as Match;
-      if (
-        stored.id &&
-        Array.isArray(stored.calls) &&
-        typeof stored.remainingMs === "number"
-      ) {
-        // A match must never silently continue its timer after a page refresh.
-        return stored.phase === "running"
-          ? { ...stored, phase: "paused" }
-          : stored;
+    return (
+      JSON.parse(localStorage.getItem(key(user)) ?? "null") ?? {
+        match: null,
+        pending: null,
       }
-    }
+    );
   } catch {
-    /* gracefully recover corrupted browser storage */
+    return { match: null, pending: null };
   }
-  return initialMatch();
 }
-
-export default function Scorekeeper() {
+export default function Scorekeeper({ active = true }: { active?: boolean }) {
   const { profile } = useAccount();
-  const [match, setMatch] = useState<Match>(() => recover(profile.id));
+  const recovery = useRef(stored(profile.id));
+  const [match, setMatch] = useState<LiveMatch | null>(recovery.current.match);
+  const clockOffset = useRef(0);
+  const current = useRef(match);
+  current.current = match;
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [pending, setPending] = useState<Pending | null>(
+    recovery.current.pending,
+  );
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const token = useRef(uid());
+  const revision = useRef<number | null>(null);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [view, setView] = useState<"prep" | "live" | "report">(
+    match ? "live" : "prep",
+  );
+  const [manage, setManage] = useState(false);
+  const [admin, setAdmin] = useState(false);
+  const [card, setCard] = useState(false);
   const fencers = useRows<Fencer>("tFencer");
   const presets = useRows<Preset>("tMatchPreset");
-  const configuration = useRows<Configuration>("tConfiguration");
-  const [bindings, setBindings] = useState<Record<string, string>>({});
-  const restoredPreset = useRef<string>("");
-  const session = useMatchSession(match);
-  const [error, setError] = useState("");
-  const [working, setWorking] = useState(false);
-  const [page, setPage] = useState<"match" | "report">("match");
-  const [confirmReset, setConfirmReset] = useState(false);
-  const deadline = useRef<number | null>(null);
-  const lastLocalWrite = useRef(0);
-  const lastSaved = useRef(match);
-  lastSaved.current = match;
-
+  const config = useRows<Configuration>("tConfiguration");
+  const [remaining, setRemaining] = useState(match?.remaining_ms ?? 180000);
   useEffect(() => {
-    if (match.phase === "running" && Date.now() - lastLocalWrite.current < 1000)
-      return;
-    lastLocalWrite.current = Date.now();
     try {
-      localStorage.setItem(
-        `${STORAGE_KEY}:${profile.id}`,
-        JSON.stringify(match),
-      );
-      localStorage.setItem(
-        `${STORAGE_KEY}:${profile.id}:${match.id}`,
-        JSON.stringify(match),
-      );
+      localStorage.setItem(key(profile.id), JSON.stringify({ match, pending }));
     } catch {
       setError(
-        "Device recovery storage is full. Keep this page open until the match is saved.",
+        "Device recovery storage is full. Keep this screen open until saved.",
       );
     }
-  }, [match, profile.id]);
-  useEffect(() => {
-    if (restoredPreset.current === match.id || !presets.data.length) return;
-    restoredPreset.current = match.id;
-    const p = presets.data.find(
-      (p) =>
-        p.id === localStorage.getItem(`lastPreset:${profile.id}`) &&
-        !p.is_archived &&
-        p.mode === "traditional",
-    );
-    if (p && !match.startedAt && !match.eventId && !match.presetId)
-      setMatch((m) => ({
-        ...m,
-        presetId: p.id,
-        durationMs: p.duration_ms,
-        remainingMs: p.duration_ms,
-        targetScore: p.target_score,
-      }));
-  }, [presets.data, match.id]);
+  }, [profile.id, match, pending]);
+  async function read(id: string) {
+    const [m, ops] = await Promise.all([loadLive(id), loadOperations(id)]);
+    clockOffset.current = new Date(m.server_now).getTime() - Date.now();
+    setMatch(m);
+    current.current = m;
+    setOperations(ops);
+    revision.current = m.revision;
+    setRemaining(m.remaining_ms);
+    return m;
+  }
+  async function open(id: string) {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    try {
+      const m = await read(id);
+      revision.current = null;
+      setView(m.phase === "ready" ? "prep" : "live");
+      setManage(false);
+      setAdmin(false);
+      setStatus("Loaded. Tap timer to claim and start.");
+      setError("");
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     const id = sessionStorage.getItem("openMatch");
     if (id) {
       sessionStorage.removeItem("openMatch");
-      setWorking(true);
-      void loadTraditionalMatch(id)
-        .then((m) => {
-          session.forget();
-          setMatch(m);
-          setPage("match");
-        })
-        .catch((e) => setError(message(e)))
-        .finally(() => setWorking(false));
-    }
+      void open(id);
+    } else if (match) void open(match.id);
   }, []);
-  useEffect(() => {
-    if (match.phase === "ready")
-      setBindings(configuration.data[0]?.key_mappings ?? {});
-  }, [configuration.data, match.id, match.phase]);
-  useEffect(() => {
-    const unreg = fencers.data.find((f) => f.is_unregistered);
-    if (unreg && !match.startedAt && !match.eventId)
-      setMatch((m) => ({
-        ...m,
-        leftFencerId: m.leftFencerId ?? unreg.id,
-        rightFencerId: m.rightFencerId ?? unreg.id,
-      }));
-  }, [fencers.data]);
-
-  useEffect(() => {
-    if (match.phase !== "running") {
-      deadline.current = null;
-      return;
+  async function send(
+    action: string,
+    data: Record<string, unknown> = {},
+    retry = false,
+  ): Promise<boolean> {
+    const m = current.current;
+    if (!m || lock.current) return false;
+    if (pendingRef.current && !retry) {
+      setError("Resolve the pending save before making another change.");
+      return false;
     }
-    // A monotonic clock prevents interval drift and catches time lost in background tabs.
-    deadline.current = performance.now() + match.remainingMs;
-    const id = window.setInterval(() => {
-      const left = Math.max(
-        0,
-        (deadline.current ?? performance.now()) - performance.now(),
-      );
-      setMatch((current) => {
-        if (current.phase !== "running") return current;
-        return left <= 0
-          ? {
-              ...current,
-              remainingMs: 0,
-              phase: "ended",
-              endReason: "time",
-              endedAt: new Date().toISOString(),
-            }
-          : { ...current, remainingMs: left };
-      });
-    }, 70);
-    return () => window.clearInterval(id);
-    // Only restart a countdown on a phase transition, not on each display tick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [match.phase]);
-
-  async function start() {
-    if (
-      match.phase === "ended" ||
-      targetReached(match) ||
-      match.remainingMs <= 0
-    )
-      return;
-    if (working) return;
-    setWorking(true);
+    lock.current = true;
+    setBusy(true);
     setError("");
     try {
-      await session.persist();
-    } catch (e) {
-      setError(message(e));
-      setWorking(false);
-      return;
-    }
-    setWorking(false);
-    setMatch((m) => ({
-      ...m,
-      finalized: false,
-      phase: "running",
-      startedAt: m.startedAt ?? new Date().toISOString(),
-    }));
-  }
-  function pause() {
-    if (match.phase !== "running") return;
-    const left = Math.max(
-      0,
-      (deadline.current ?? performance.now()) - performance.now(),
-    );
-    setMatch((m) =>
-      left === 0
-        ? {
-            ...m,
-            remainingMs: 0,
-            phase: "ended",
-            endReason: "time",
-            endedAt: new Date().toISOString(),
-          }
-        : { ...m, remainingMs: left, phase: "paused" },
-    );
-  }
-  useEffect(() => {
-    if (session.failed && match.phase === "running") pause();
-  }, [session.failed]);
-  function addCall(side: Side, type: CallType, points: PointValue) {
-    setMatch((m) => {
-      if (m.phase !== "paused" && m.phase !== "ended") return m;
-      const next: Match = {
-        ...m,
-        finalized: false,
-        winnerSide: undefined,
-        calls: [
-          ...m.calls,
-          {
-            id: uid(),
-            side,
-            type,
-            points,
-            matchTimeMs: m.remainingMs,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      };
-      return targetReached(next)
-        ? {
-            ...next,
-            phase: "ended",
-            endReason: "target",
-            endedAt: new Date().toISOString(),
-          }
-        : next;
-    });
-  }
-  function removeCall(id: string) {
-    setMatch((m) => {
-      if (m.phase === "running") return m;
-      const next = {
-        ...m,
-        finalized: false,
-        winnerSide: undefined,
-        calls: m.calls.filter((call) => call.id !== id),
-      };
-      if (m.endReason === "target" && !targetReached(next)) {
-        return next.remainingMs <= 0
-          ? { ...next, phase: "ended", endReason: "time" }
-          : { ...next, phase: "paused", endReason: null, endedAt: null };
+      if (revision.current === null) {
+        const c = await claim(m.id, token.current);
+        revision.current = c.revision;
       }
-      return next;
-    });
-  }
-  function reset() {
-    if (match.startedAt && session.status !== "Saved") {
-      setError("Save the current match before starting a new one.");
-      return;
-    }
-    void session.release().catch((e) => setError(message(e)));
-    setMatch(initialMatch());
-    setPage("match");
-    setConfirmReset(false);
-  }
-  function updateSetup(
-    key: "eventName" | "roundName" | "leftName" | "rightName",
-    value: string,
-  ) {
-    setMatch((m) => (m.phase === "ready" ? { ...m, [key]: value } : m));
-  }
-  async function openReport() {
-    if (match.phase !== "ended") {
-      setPage("report");
-      return;
-    }
-    setWorking(true);
-    try {
-      await session.persist(true);
-      setMatch((m) => ({ ...m, finalized: true }));
-      await session.release();
-      setPage("report");
+      const p = retry
+        ? pendingRef.current!
+        : { id: uid(), action, data, revision: revision.current! };
+      // Persist request identity before sending, so a lost response cannot duplicate a penalty.
+      setPending(p);
+      pendingRef.current = p;
+      localStorage.setItem(
+        key(profile.id),
+        JSON.stringify({ match: m, pending: p }),
+      );
+      const result = await command(
+        m.id,
+        token.current,
+        p.revision,
+        p.id,
+        p.action,
+        p.data,
+      );
+      revision.current = result.revision;
+      await read(m.id);
+      setPending(null);
+      pendingRef.current = null;
+      setStatus("Saved");
+      return true;
     } catch (e) {
       setError(message(e));
+      setStatus("Save failed — retry or reload");
+      if (
+        e &&
+        typeof e === "object" &&
+        "code" in e &&
+        /^[A-Z0-9]{5}$/.test(String(e.code))
+      ) {
+        setPending(null);
+        pendingRef.current = null;
+      }
+      return false;
     } finally {
-      setWorking(false);
+      lock.current = false;
+      setBusy(false);
     }
   }
+  // Server stores the deadline. Reconnect displays elapsed time without restarting a paused clock.
   useEffect(() => {
-    function key(e: KeyboardEvent) {
+    if (!match) return;
+    let expiring = false;
+    const tick = () => {
+      const left =
+        match.phase === "running" && match.clock_deadline
+          ? Math.max(
+              0,
+              new Date(match.clock_deadline).getTime() -
+                (Date.now() + clockOffset.current),
+            )
+          : match.remaining_ms;
+      setRemaining(left);
       if (
-        document.querySelector('[role="dialog"]') ||
+        left === 0 &&
+        match.phase === "running" &&
+        !expiring &&
+        !lock.current &&
+        !pendingRef.current
+      ) {
+        expiring = true;
+        void send("expire").then((ok) => {
+          if (!ok) expiring = false;
+        });
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 100);
+    return () => clearInterval(timer);
+  }, [match]);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (
+        current.current?.phase === "running" &&
+        !lock.current &&
+        !pendingRef.current
+      )
+        void send("checkpoint");
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (pending && current.current?.phase === "running")
+      setRemaining(current.current.remaining_ms);
+  }, [pending]);
+  async function showManage() {
+    if (match?.phase === "running") await send("pause");
+    setManage(true);
+  }
+  async function newMatch() {
+    if (match) {
+      if (match.phase === "running" || pending) {
+        setError("Pause and save the current match first.");
+        return;
+      }
+      if (!confirm("Start another match? The saved match remains in History."))
+        return;
+      try {
+        await db().rpc("release_match", {
+          p_id: match.id,
+          p_token: token.current,
+        });
+      } catch {
+        /* lease expires safely */
+      }
+    }
+    setMatch(null);
+    current.current = null;
+    setOperations([]);
+    setView("prep");
+    setManage(false);
+    revision.current = null;
+    setError("");
+  }
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const m = current.current;
+      if (
+        !m ||
+        view !== "live" ||
+        manage ||
+        lock.current ||
+        pendingRef.current ||
         e.repeat ||
         e.ctrlKey ||
         e.metaKey ||
         e.altKey ||
         (e.target instanceof HTMLElement &&
-          e.target.closest(
-            "input,textarea,select,[contenteditable=true],[role=dialog]",
-          ))
+          e.target.closest("input,select,textarea,button,[role=dialog]"))
       )
         return;
-      const action = Object.keys(bindings).find(
-        (k) => bindings[k] === e.key.toLowerCase(),
+      const action = Object.keys(m.key_snapshot ?? {}).find(
+        (k) => m.key_snapshot[k] === e.key.toLowerCase(),
       );
       if (!action) return;
       e.preventDefault();
-      if (action === "toggle") {
-        if (match.phase === "running") pause();
-        else void start();
-      } else if (action === "undo") {
-        const call = match.calls.at(-1);
-        if (call) removeCall(call.id);
-      } else {
+      if (action === "toggle")
+        void send(m.phase === "running" ? "pause" : "start");
+      else if (action === "undo") {
+        const reversed = new Set(
+          operations
+            .filter((o) => o.kind === "reverse")
+            .map((o) => o.data.operationId),
+        );
+        const op = operations
+          .filter(
+            (o) =>
+              ["score", "penalty", "admin"].includes(o.kind) &&
+              (o.kind !== "admin" ||
+                o.left_delta !== 0 ||
+                o.right_delta !== 0) &&
+              !reversed.has(o.id),
+          )
+          .at(-1);
+        if (
+          op &&
+          m.phase !== "running" &&
+          confirm("Revert the last scoring operation?")
+        )
+          void send("reverse", { operationId: op.id });
+      } else if (m.phase === "paused" && !m.finalized_at) {
         const [side, type, points] = action.split(".");
-        addCall(side as Side, type as CallType, Number(points) as PointValue);
+        if (
+          (type === "indirect" && points === "1") ||
+          (type === "clean" && points === "3") ||
+          (type === "counter" && points === "5")
+        )
+          void send("score", { side, type, points: Number(points) });
       }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [view, manage, operations]);
+  const live = view === "live" && Boolean(match);
+  useEffect(() => {
+    document.body.classList.toggle("live-match-active", live && active);
+    return () => document.body.classList.remove("live-match-active");
+  }, [live, active]);
+  const unavailable = busy || Boolean(pending);
+  async function prep(values: Record<string, unknown>) {
+    if (lock.current) return;
+    setBusy(true);
+    lock.current = true;
+    setError("");
+    try {
+      let id = match?.id;
+      if (!id) {
+        id = uid();
+        const { error } = await db().from("tTraditionalMatch").insert({
+          id,
+          owner_id: profile.id,
+          left_fencer_id: values.leftFencerId,
+          right_fencer_id: values.rightFencerId,
+          left_name: values.leftName,
+          right_name: values.rightName,
+        });
+        if (error) throw error;
+        await read(id);
+        revision.current = null;
+      }
+    } catch (e) {
+      setError(message(e));
+      return;
+    } finally {
+      lock.current = false;
+      setBusy(false);
     }
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  });
-  const leftScore = scoreFor(match, "left");
-  const rightScore = scoreFor(match, "right");
-  const finished = match.phase === "ended";
-  const editable = match.phase === "ready";
-  const winner =
-    leftScore === rightScore
-      ? match.winnerSide
-        ? match.winnerSide === "left"
-          ? match.leftName
-          : match.rightName
-        : match.endReason === "time"
-          ? "Tie"
-          : "No result"
-      : leftScore > rightScore
-        ? match.leftName
-        : match.rightName;
-
-  return (
-    <section className="single-match-ui">
-      <label className="search">
-        Recover another session on this device
-        <select
-          value=""
-          onChange={(e) => {
-            const value = localStorage.getItem(e.target.value);
-            if (
-              value &&
-              window.confirm(
-                "Recover this device session? Save your current bout first.",
-              )
-            ) {
-              const restored = JSON.parse(value) as Match;
-              session.forget();
-              setMatch({
-                ...restored,
-                phase: restored.phase === "running" ? "paused" : restored.phase,
-              });
-              setPage("match");
-            }
-          }}
-        >
-          <option value="">Choose a device recovery snapshot</option>
-          {Object.keys(localStorage)
-            .filter(
-              (k) =>
-                k.startsWith(`${STORAGE_KEY}:${profile.id}:`) &&
-                !k.endsWith(match.id),
-            )
-            .map((k) => {
-              try {
-                const m = JSON.parse(localStorage.getItem(k)!) as Match;
-                return (
-                  <option key={k} value={k}>
-                    {m.leftName} / {m.rightName} · {m.id.slice(0, 8)}
-                  </option>
-                );
-              } catch {
-                return null;
-              }
-            })}
-        </select>
-      </label>
-      <Notice
-        error={error || fencers.error || presets.error || configuration.error}
-      />
-      <header className="app-header">
-        <div>
-          <span className="eyebrow">
-            TRADITIONAL · {match.eventId ? "EVENT" : "STANDALONE"}
-          </span>
-          <h2>
-            Single Match<span className="accent">.</span>
-          </h2>
-        </div>
-        <div className="header-actions">
-          <span className="local-tag">{session.status}</span>
-          <button className="subtle" onClick={() => setConfirmReset(true)}>
-            New match
-          </button>
-        </div>
-      </header>
-
-      {confirmReset && (
-        <div className="backdrop" role="presentation">
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm new match"
-          >
-            <h2>Start a new match?</h2>
-            <p>
-              The current match will be replaced on this device. Save it to the
-              cloud or export its report first if you need to keep it.
-            </p>
-            <div className="modal-actions">
-              <button className="subtle" onClick={() => setConfirmReset(false)}>
-                Cancel
-              </button>
-              <button className="danger" onClick={reset}>
-                Replace match
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <nav className="tabs" aria-label="Screen navigation">
-        <button
-          className={page === "match" ? "selected" : ""}
-          onClick={() => setPage("match")}
-        >
-          Match control
-        </button>
-        <button
-          className={page === "report" ? "selected" : ""}
-          onClick={() => void openReport()}
-        >
-          Match report
-        </button>
-      </nav>
-
-      <section className="card">
-        <div className="button-row">
-          <span role="status">{session.status}</span>
+    if (await send("prepare", values)) {
+      setView("live");
+      if (values.presetId)
+        localStorage.setItem(
+          `lastPreset:${profile.id}`,
+          String(values.presetId),
+        );
+    }
+  }
+  const recoveryControls = (
+    <>
+      <Notice error={error} />
+      {pending && (
+        <section className="save-warning" role="alert">
+          <p>A save needs attention. Further edits are paused.</p>
           <button
-            className="subtle"
-            disabled={working}
-            onClick={() =>
-              void session.persist().catch((e) => setError(message(e)))
-            }
-          >
-            Save / retry
-          </button>
-          {session.failed && (
-            <button
-              className="subtle"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Recover an expired referee claim? Unsaved changes from the other session may be lost.",
-                  )
-                ) {
-                  session.forget();
-                  void session
-                    .persist(false, true)
-                    .catch((e) => setError(message(e)));
+            disabled={busy}
+            onClick={async () => {
+              const action = pending.action;
+              if (await send(action, pending.data, true)) {
+                if (action === "penalty") {
+                  setCard(false);
+                  setAdmin(false);
                 }
-              }}
-            >
-              Recover expired claim
-            </button>
-          )}
-        </div>
-      </section>
-
-      {page === "match" ? (
-        <>
-          <section className="setup card">
-            <label>
-              Match preset
-              <select
-                disabled={!editable}
-                value={match.presetId ?? ""}
-                onChange={(e) => {
-                  const p = presets.data.find((p) => p.id === e.target.value);
-                  if (!p) {
-                    setMatch((m) => ({ ...m, presetId: undefined }));
-                    return;
-                  }
-                  if (p) {
-                    localStorage.setItem(`lastPreset:${profile.id}`, p.id);
-                    setMatch((m) => ({
-                      ...m,
-                      presetId: p.id,
-                      durationMs: p.duration_ms,
-                      remainingMs: p.duration_ms,
-                      targetScore: p.target_score,
-                    }));
-                  }
-                }}
-              >
-                <option value="">Custom settings</option>
-                {presets.data
-                  .filter((p) => !p.is_archived && p.mode === "traditional")
-                  .map((p) => (
-                    <option value={p.id} key={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="section-heading">
-              <h2>Match setup</h2>
-              <span>
-                {editable
-                  ? "Editable until timer starts"
-                  : "Locked once started"}
-              </span>
-            </div>
-            <div className="fields">
-              <label>
-                Event
-                <input
-                  disabled
-                  placeholder="Standalone"
-                  value={match.eventName}
-                  onChange={(e) => updateSetup("eventName", e.target.value)}
-                />
-              </label>
-              <label>
-                Round / bout
-                <input
-                  disabled={!editable}
-                  placeholder="Round (optional)"
-                  value={match.roundName}
-                  onChange={(e) => updateSetup("roundName", e.target.value)}
-                />
-              </label>
-              <label>
-                Match length (minutes)
-                <input
-                  disabled={!editable}
-                  type="number"
-                  min="1"
-                  max="180"
-                  value={match.durationMs / 60000}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isFinite(n) && n >= 1 && n <= 180)
-                      setMatch((m) => ({
-                        ...m,
-                        durationMs: n * 60000,
-                        remainingMs: n * 60000,
-                      }));
-                  }}
-                />
-              </label>
-              <label>
-                Target score (optional)
-                <input
-                  disabled={!editable}
-                  type="number"
-                  min="1"
-                  max="10000"
-                  placeholder="No target"
-                  value={match.targetScore ?? ""}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setMatch((m) => ({
-                      ...m,
-                      targetScore:
-                        e.target.value === ""
-                          ? null
-                          : n >= 1 && n <= 10000
-                            ? Math.floor(n)
-                            : m.targetScore,
-                    }));
-                  }}
-                />
-              </label>
-            </div>
-          </section>
-          <section className={`arena card ${finished ? "is-finished" : ""}`}>
-            <div className="timer-area">
-              <div className="status-line">
-                <span className={`status-dot ${match.phase}`} />{" "}
-                {match.phase === "ready"
-                  ? "READY TO START"
-                  : match.phase === "running"
-                    ? "MATCH IN PROGRESS"
-                    : match.phase === "paused"
-                      ? "MATCH PAUSED · RECORD THE CALL"
-                      : `MATCH COMPLETE · ${match.endReason === "target" ? "TARGET REACHED" : match.endReason === "time" ? "TIME EXPIRED" : "ENDED"}`}
-              </div>
-              <div className="clock" aria-live="off">
-                {clockText(match.remainingMs)}
-              </div>
-              <div className="time-hint">
-                {match.targetScore
-                  ? `First to ${match.targetScore} points or time expires`
-                  : "Match ends when time expires"}
-              </div>
-            </div>
-            {finished && (
-              <div className="finished-banner">
-                <strong>MATCH COMPLETE</strong>
-                <span>
-                  {winner === "Tie"
-                    ? "Match tied"
-                    : winner === "No result"
-                      ? "No result"
-                      : `${winner} leads`}
-                </span>
-                <button onClick={() => void openReport()}>
-                  View match report →
-                </button>
-              </div>
-            )}
-            <div className="fencers">
-              {(["left", "right"] as Side[]).map((side) => (
-                <div className={`fencer ${side}`} key={side}>
-                  <label className="fencer-name-label">
-                    {side === "left" ? "FENCER A" : "FENCER B"}
-                    <select
-                      aria-label={`${side} registered fencer`}
-                      disabled={!editable || Boolean(match.eventId)}
-                      value={
-                        (side === "left"
-                          ? match.leftFencerId
-                          : match.rightFencerId) ?? ""
-                      }
-                      onChange={(e) => {
-                        const f = fencers.data.find(
-                          (f) => f.id === e.target.value,
-                        );
-                        if (f)
-                          setMatch((m) => ({
-                            ...m,
-                            [side === "left"
-                              ? "leftFencerId"
-                              : "rightFencerId"]: f.id,
-                            [side === "left" ? "leftName" : "rightName"]:
-                              f.is_unregistered
-                                ? side === "left"
-                                  ? "Fencer A"
-                                  : "Fencer B"
-                                : f.display_name,
-                          }));
-                      }}
-                    >
-                      <option value="">Choose competitor</option>
-                      {fencers.data
-                        .filter(
-                          (f) =>
-                            !f.is_archived &&
-                            (!match.eventId || !f.is_unregistered),
-                        )
-                        .map((f) => (
-                          <option value={f.id} key={f.id}>
-                            {f.is_unregistered
-                              ? "Unregistered (type name below)"
-                              : `${f.display_name} · ${f.id.slice(0, 8)}`}
-                          </option>
-                        ))}
-                    </select>
-                    <input
-                      aria-label={`${side} fencer name`}
-                      disabled={
-                        !editable ||
-                        !fencers.data.find(
-                          (f) =>
-                            f.id ===
-                            (side === "left"
-                              ? match.leftFencerId
-                              : match.rightFencerId),
-                        )?.is_unregistered
-                      }
-                      value={side === "left" ? match.leftName : match.rightName}
-                      onChange={(e) =>
-                        updateSetup(
-                          side === "left" ? "leftName" : "rightName",
-                          e.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                  <div className="score">
-                    {side === "left" ? leftScore : rightScore}
-                  </div>
-                  <div className="points-label">POINTS</div>
-                  <div className="score-grid">
-                    <div className="score-grid-head">
-                      <span>Call type</span>
-                      {POINT_VALUES.map((points) => (
-                        <span key={points}>+{points}</span>
-                      ))}
-                    </div>
-                    {TYPES.map((type) => (
-                      <div className="score-grid-row" key={type}>
-                        <span>{SCORE_LABELS[type]}</span>
-                        {POINT_VALUES.map((points) => (
-                          <button
-                            key={points}
-                            aria-label={`${SCORE_LABELS[type]} ${points} points for ${side === "left" ? match.leftName : match.rightName}`}
-                            onClick={() => addCall(side, type, points)}
-                            disabled={
-                              working ||
-                              (match.phase !== "paused" &&
-                                match.phase !== "ended")
-                            }
-                          >
-                            +{points}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {finished &&
-              match.bracketId &&
-              !match.groupId &&
-              leftScore === rightScore && (
-                <label className="search">
-                  Referee tiebreak winner
-                  <select
-                    value={match.winnerSide ?? ""}
-                    onChange={(e) =>
-                      setMatch((m) => ({
-                        ...m,
-                        winnerSide: e.target.value as Side,
-                        finalized: false,
-                      }))
-                    }
-                  >
-                    <option value="">Resolve tiebreak</option>
-                    <option value="left">{match.leftName}</option>
-                    <option value="right">{match.rightName}</option>
-                  </select>
-                </label>
-              )}
-            <div className="controls">
-              {match.phase === "running" ? (
-                <button className="primary large" onClick={pause}>
-                  Ⅱ Pause for call
-                </button>
-              ) : (
-                <button
-                  className="primary large"
-                  onClick={() => void start()}
-                  disabled={finished || working}
-                >
-                  ▶ {match.phase === "ready" ? "Start match" : "Resume match"}
-                </button>
-              )}
-              {match.phase === "paused" && (
-                <button
-                  className="subtle large"
-                  onClick={() =>
-                    setMatch((m) => ({
-                      ...m,
-                      phase: "ended",
-                      endReason: "manual",
-                      endedAt: new Date().toISOString(),
-                    }))
-                  }
-                >
-                  End match
-                </button>
-              )}
-            </div>
-            <p className="rules-note">
-              To record a score, pause the clock first. Choose the scoring
-              category and its 1-, 3-, or 5-point value. Resume after recording
-              the call.
-            </p>
-          </section>
-          <section className="card history">
-            <div className="section-heading">
-              <h2>Call history</h2>
-              <span>{match.calls.length} recorded</span>
-            </div>
-            {match.calls.length === 0 ? (
-              <p className="muted">
-                No calls yet. Start the match, pause, and enter the referee's
-                decision.
-              </p>
-            ) : (
-              <div className="history-items">
-                {[...match.calls].reverse().map((call) => (
-                  <div className="history-row" key={call.id}>
-                    <span className="call-time">
-                      {clockText(call.matchTimeMs)}
-                    </span>
-                    <span>
-                      <strong>
-                        {call.side === "left"
-                          ? match.leftName
-                          : match.rightName}
-                      </strong>
-                      <small>{SCORE_LABELS[call.type]}</small>
-                    </span>
-                    <b>+{call.points}</b>
-                    <button
-                      className="icon-btn"
-                      title="Remove incorrect call"
-                      aria-label={`Remove ${SCORE_LABELS[call.type]} for ${call.side === "left" ? match.leftName : match.rightName}`}
-                      disabled={match.phase === "running"}
-                      onClick={() => removeCall(call.id)}
-                    >
-                      Undo
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      ) : (
-        <section className="card report">
-          <div className="section-heading">
-            <h2>Match report</h2>
-            <span>{finished ? "Final" : "In progress · provisional"}</span>
-          </div>
-          <p className="muted">
-            {match.eventName || "Untitled event"}
-            {match.roundName ? ` · ${match.roundName}` : ""} ·{" "}
-            {new Date(match.createdAt).toLocaleString()}
-          </p>
-          <div className="report-score">
-            <div>
-              <strong>{match.leftName}</strong>
-              <span>{leftScore}</span>
-            </div>
-            <b>—</b>
-            <div>
-              <strong>{match.rightName}</strong>
-              <span>{rightScore}</span>
-            </div>
-          </div>
-          <p className="report-outcome">
-            {finished
-              ? match.endReason === "manual"
-                ? "Incomplete / no result (manually ended)"
-                : winner === "Tie"
-                  ? "Final result: Tie"
-                  : `Final result: ${winner} leads`
-              : `Current status: ${match.phase}`}
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Scoring category</th>
-                  <th>{match.leftName}</th>
-                  <th>{match.rightName}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TYPES.flatMap((type) =>
-                  POINT_VALUES.map((points) => (
-                    <tr key={`${type}-${points}`}>
-                      <td>
-                        {SCORE_LABELS[type]} (+{points})
-                      </td>
-                      <td>{countFor(match, "left", type, points)}</td>
-                      <td>{countFor(match, "right", type, points)}</td>
-                    </tr>
-                  )),
-                )}
-                <tr className="total">
-                  <td>Total points</td>
-                  <td>{leftScore}</td>
-                  <td>{rightScore}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="report-actions">
-            <button className="primary" onClick={() => downloadCsv(match)}>
-              Export scoring CSV
-            </button>
-            <button className="subtle" onClick={() => window.print()}>
-              Print report
-            </button>
-            <button className="subtle" onClick={() => setPage("match")}>
-              Back to match
-            </button>
-          </div>
-          <p className="muted footnote">
-            CSV includes each individual scoring call, its point value, match
-            clock, and recording timestamp. Changes are autosaved with a referee
-            claim and immutable correction history.
-          </p>
+                if (action === "admin") setAdmin(false);
+                if (action === "prepare") setView("live");
+              }
+            }}
+          >
+            Retry pending save
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => {
+              if (
+                confirm(
+                  "Discard the local pending request and reload authoritative data? A request may already have committed; the report will show it.",
+                )
+              ) {
+                setPending(null);
+                pendingRef.current = null;
+                if (match) void open(match.id);
+              }
+            }}
+          >
+            Reload saved state
+          </button>
         </section>
       )}
+    </>
+  );
+  return (
+    <div
+      className={`single-match-ui ${live ? "live-scoreboard" : ""} ${match?.is_overtime ? "overtime" : ""}`}
+    >
+      <Notice error={error || fencers.error || presets.error || config.error} />
+      {!manage && recoveryControls}
+      {view === "prep" ? (
+        <>
+          <h2>Match Prep</h2>
+          <Prep
+            key={match?.id ?? "new"}
+            match={match}
+            fencers={fencers.data}
+            presets={presets.data}
+            userId={profile.id}
+            busy={unavailable}
+            onConfirm={prep}
+          />
+          <a href="#/">Cancel / Dashboard</a>
+          {match && match.phase !== "ready" && (
+            <button onClick={() => setView("live")}>Return to match</button>
+          )}
+          <label>
+            Recover saved match on this device
+            <input
+              placeholder="Match ID"
+              defaultValue={recovery.current.match?.id ?? ""}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value)
+                  void open(e.currentTarget.value);
+              }}
+            />
+          </label>
+        </>
+      ) : (
+        match && (
+          <>
+            {live ? (
+              <>
+                <div className="win-condition">
+                  {match.is_overtime
+                    ? "OVERTIME · Sudden death"
+                    : match.match_type === "knockout"
+                      ? "Knockout"
+                      : "Standard"}{" "}
+                  |{" "}
+                  {match.is_overtime
+                    ? "First score wins"
+                    : match.target_score
+                      ? `First to ${match.target_score} Points`
+                      : "Time limit"}
+                </div>
+                <div className="live-arena">
+                  <SideScore
+                    side="left"
+                    name={match.current_left_name}
+                    score={match.left_score}
+                    disabled={
+                      unavailable ||
+                      match.phase !== "paused" ||
+                      Boolean(match.finalized_at)
+                    }
+                    onScore={(type, points) =>
+                      void send("score", { side: "left", type, points })
+                    }
+                  />
+                  <div className="live-clock">
+                    <button
+                      className={`clock clock-button ${match.phase}`}
+                      disabled={
+                        unavailable ||
+                        Boolean(match.finalized_at) ||
+                        match.phase === "ended"
+                      }
+                      aria-label={`${clockText(remaining)} — ${match.phase === "running" ? "Pause" : "Start"} clock`}
+                      onClick={() =>
+                        void send(match.phase === "running" ? "pause" : "start")
+                      }
+                    >
+                      {clockText(remaining)}
+                    </button>
+                    <p role="status">
+                      {match.finalized_at
+                        ? "Match complete"
+                        : match.phase === "ended"
+                          ? "Winner unresolved"
+                          : match.phase === "running"
+                            ? "Running · tap to pause"
+                            : "Paused · tap to start"}
+                    </p>
+                    {match.finalized_at && (
+                      <strong>
+                        {match.outcome === "draw"
+                          ? "Draw"
+                          : `${match.winner_side === "left" ? match.current_left_name : match.current_right_name} wins`}
+                      </strong>
+                    )}
+                  </div>
+                  <SideScore
+                    side="right"
+                    name={match.current_right_name}
+                    score={match.right_score}
+                    disabled={
+                      unavailable ||
+                      match.phase !== "paused" ||
+                      Boolean(match.finalized_at)
+                    }
+                    onScore={(type, points) =>
+                      void send("score", { side: "right", type, points })
+                    }
+                  />
+                </div>
+                <div className="live-bottom">
+                  <small role="status">{busy ? "Saving…" : status}</small>
+                  <button
+                    className="primary"
+                    disabled={busy}
+                    onClick={() => void showManage()}
+                  >
+                    Manage
+                  </button>
+                </div>
+              </>
+            ) : (
+              <section className="card">
+                <h2>Match Report</h2>
+                <h3>
+                  {match.current_left_name} {match.left_score} –{" "}
+                  {match.right_score} {match.current_right_name}
+                </h3>
+                <p>
+                  {match.match_type} · {match.outcome} ·{" "}
+                  {match.finalized_at ? "Finalized" : "Not finalized"}
+                </p>
+                <div className="button-row">
+                  <button onClick={() => setView("live")}>
+                    Back to scoreboard
+                  </button>
+                  <button
+                    onClick={() =>
+                      downloadJson(`match-${match.id}.json`, {
+                        match,
+                        operations,
+                      })
+                    }
+                  >
+                    Export report
+                  </button>
+                  <button onClick={() => exportCsv(match, operations)}>
+                    Export CSV
+                  </button>
+                  <button onClick={() => void newMatch()}>New match</button>
+                  <a href="#/history/matches">Match History</a>
+                </div>
+                <MatchLog operations={operations} />
+                <h3>Settings and provenance</h3>
+                <pre>{JSON.stringify(match, null, 2)}</pre>
+              </section>
+            )}
+            {manage && (
+              <Dialog
+                title="Manage match"
+                onClose={() => {
+                  if (!admin && !card) setManage(false);
+                }}
+              >
+                {!card && recoveryControls}
+                <p>
+                  {match.current_left_name} {match.left_score} –{" "}
+                  {match.right_score} {match.current_right_name} ·{" "}
+                  {clockText(match.remaining_ms)}
+                </p>
+                {!admin ? (
+                  <>
+                    <div className="button-row">
+                      <button
+                        disabled={unavailable || match.phase === "running"}
+                        onClick={() => setAdmin(true)}
+                      >
+                        Admin Mode
+                      </button>
+                      <button
+                        disabled={unavailable}
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Complete this match using its current effective scores and selected outcome?",
+                            )
+                          )
+                            void send("complete");
+                        }}
+                      >
+                        Match Complete
+                      </button>
+                      <button
+                        disabled={unavailable}
+                        onClick={() => {
+                          setManage(false);
+                          setView("report");
+                        }}
+                      >
+                        Match Report
+                      </button>
+                      <button
+                        disabled={unavailable}
+                        onClick={() => void newMatch()}
+                      >
+                        New match
+                      </button>
+                      <a href="#/">Dashboard</a>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={async () => {
+                        if (
+                          !confirm(
+                            "Recover an expired referee claim and reload saved data? Unsaved local changes will be discarded.",
+                          )
+                        )
+                          return;
+                        try {
+                          await claim(match.id, token.current, true);
+                          setPending(null);
+                          pendingRef.current = null;
+                          await read(match.id);
+                          setError("");
+                        } catch (e) {
+                          setError(message(e));
+                        }
+                      }}
+                    >
+                      Recover expired claim / reload
+                    </button>
+                    <h3>Match log</h3>
+                    <MatchLog
+                      operations={operations}
+                      busy={unavailable}
+                      onReverse={(id) =>
+                        void send("reverse", { operationId: id })
+                      }
+                    />
+                    <button onClick={() => setManage(false)}>
+                      Close Manage
+                    </button>
+                  </>
+                ) : (
+                  <Admin
+                    key={`${match.id}:${match.revision}`}
+                    match={match}
+                    busy={unavailable}
+                    onCancel={() => setAdmin(false)}
+                    onCard={() => setCard(true)}
+                    onApply={async (d) => {
+                      const ok = await send("admin", d);
+                      if (ok) setAdmin(false);
+                      return ok;
+                    }}
+                  />
+                )}
+                {card && (
+                  <Penalty
+                    match={match}
+                    feedback={recoveryControls}
+                    config={config.data[0]}
+                    busy={unavailable}
+                    onCancel={() => setCard(false)}
+                    onConfirm={async (d) => {
+                      if (match.finalized_at) {
+                        setError(
+                          "Use Resume / reopen in Admin Mode before adding a new card to a finalized match.",
+                        );
+                        return false;
+                      }
+                      const ok = await send("penalty", d);
+                      if (ok) {
+                        setCard(false);
+                        setAdmin(false);
+                      }
+                      return ok;
+                    }}
+                  />
+                )}
+              </Dialog>
+            )}
+          </>
+        )
+      )}
+    </div>
+  );
+}
+function SideScore({
+  side,
+  name,
+  score,
+  disabled,
+  onScore,
+}: {
+  side: Side;
+  name: string;
+  score: number;
+  disabled: boolean;
+  onScore: (type: string, points: number) => void;
+}) {
+  return (
+    <section className={`live-side ${side}`} aria-label={`${side} fencer`}>
+      <h2>{name}</h2>
+      <div className="live-score">{score}</div>
+      <div className="quick-scores">
+        {[
+          [1, "indirect"],
+          [3, "clean"],
+          [5, "counter"],
+        ].map(([points, type]) => (
+          <button
+            key={points}
+            disabled={disabled}
+            title={String(type)}
+            aria-label={`${side} ${type} +${points}`}
+            onClick={() => onScore(String(type), Number(points))}
+          >
+            +{points}
+          </button>
+        ))}
+      </div>
     </section>
   );
+}
+function Prep({
+  match,
+  fencers,
+  presets,
+  userId,
+  busy,
+  onConfirm,
+}: {
+  match: LiveMatch | null;
+  fencers: Fencer[];
+  presets: Preset[];
+  userId: string;
+  busy: boolean;
+  onConfirm: (values: Record<string, unknown>) => Promise<void>;
+}) {
+  const remembered = presets.find(
+    (p) =>
+      p.id === localStorage.getItem(`lastPreset:${userId}`) && !p.is_archived,
+  );
+  const unreg = fencers.find((f) => f.is_unregistered);
+  const [left, setLeft] = useState(match?.left_fencer_id ?? "");
+  const [right, setRight] = useState(match?.right_fencer_id ?? "");
+  const [leftName, setLeftName] = useState(match?.left_name ?? "");
+  const [rightName, setRightName] = useState(match?.right_name ?? "");
+  const [preset, setPreset] = useState(
+    match?.preset_id ?? remembered?.id ?? "",
+  );
+  const [seconds, setSeconds] = useState(
+    (match?.duration_ms ?? remembered?.duration_ms ?? 180000) / 1000,
+  );
+  const [target, setTarget] = useState<string>(
+    String(match?.target_score ?? remembered?.target_score ?? ""),
+  );
+  const [type, setType] = useState(
+    match?.bracket_id && !match.group_id
+      ? "knockout"
+      : (match?.match_type ?? "standard"),
+  );
+  const [round, setRound] = useState(match?.round_name ?? "");
+  useEffect(() => {
+    if (!match && remembered && !preset) {
+      setPreset(remembered.id);
+      setSeconds(remembered.duration_ms / 1000);
+      setTarget(String(remembered.target_score ?? ""));
+    }
+  }, [remembered?.id]);
+  useEffect(() => {
+    if (unreg) {
+      setLeft((v) => v || unreg.id);
+      setRight((v) => v || unreg.id);
+    }
+  }, [unreg?.id]);
+  function picker(side: Side) {
+    const id = side === "left" ? left : right,
+      name = side === "left" ? leftName : rightName,
+      setId = side === "left" ? setLeft : setRight,
+      setName = side === "left" ? setLeftName : setRightName;
+    return (
+      <fieldset>
+        <legend>{side === "left" ? "Left" : "Right"} fencer</legend>
+        <label>
+          Registered fencer
+          <select
+            required
+            disabled={Boolean(match?.event_id) || busy}
+            value={id}
+            onChange={(e) => {
+              setId(e.target.value);
+              const f = fencers.find((f) => f.id === e.target.value);
+              setName(f?.is_unregistered ? "" : (f?.display_name ?? ""));
+            }}
+          >
+            <option value="">Choose fencer</option>
+            {fencers
+              .filter((f) => !f.is_archived || f.id === id)
+              .filter((f) => !match?.event_id || !f.is_unregistered)
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.display_name}
+                  {f.affiliation ? ` · ${f.affiliation}` : ""}
+                </option>
+              ))}
+          </select>
+        </label>
+        {id === unreg?.id && (
+          <label>
+            Participant name
+            <input
+              required
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+        )}
+      </fieldset>
+    );
+  }
+  return (
+    <form
+      className="card editor"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void onConfirm({
+          leftFencerId: left,
+          rightFencerId: right,
+          leftName:
+            left === unreg?.id
+              ? leftName.trim()
+              : fencers.find((f) => f.id === left)?.display_name,
+          rightName:
+            right === unreg?.id
+              ? rightName.trim()
+              : fencers.find((f) => f.id === right)?.display_name,
+          presetId: preset || null,
+          durationMs: Math.round(seconds * 1000),
+          targetScore: target ? Number(target) : null,
+          matchType: type,
+          roundName: round,
+        });
+      }}
+    >
+      <div className="fields">
+        {picker("left")}
+        {picker("right")}
+        <label>
+          Preset
+          <select
+            value={preset}
+            disabled={busy}
+            onChange={(e) => {
+              setPreset(e.target.value);
+              const p = presets.find((p) => p.id === e.target.value);
+              if (p) {
+                setSeconds(p.duration_ms / 1000);
+                setTarget(String(p.target_score ?? ""));
+              }
+            }}
+          >
+            <option value="">Custom</option>
+            {presets
+              .filter(
+                (p) =>
+                  p.mode === "traditional" &&
+                  (!p.is_archived || p.id === preset),
+              )
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Length (seconds)
+          <input
+            type="number"
+            min={1}
+            max={10800}
+            required
+            value={seconds}
+            onChange={(e) => setSeconds(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          Score to Win (blank for no target)
+          <input
+            type="number"
+            min={1}
+            max={10000}
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          />
+        </label>
+        <label>
+          Match type
+          <select
+            disabled={Boolean(match?.event_id)}
+            value={type}
+            onChange={(e) => setType(e.target.value as "standard" | "knockout")}
+          >
+            <option value="standard">Standard</option>
+            <option value="knockout">Knockout</option>
+          </select>
+        </label>
+        <label>
+          Round / bout
+          <input value={round} onChange={(e) => setRound(e.target.value)} />
+        </label>
+      </div>
+      <button className="primary" disabled={busy || !left || !right}>
+        Confirm match — timer stays stopped
+      </button>
+    </form>
+  );
+}
+function Admin({
+  match,
+  busy,
+  onApply,
+  onCancel,
+  onCard,
+}: {
+  match: LiveMatch;
+  busy: boolean;
+  onApply: (data: Record<string, unknown>) => Promise<boolean>;
+  onCancel: () => void;
+  onCard: () => void;
+}) {
+  const [left, setLeft] = useState(match.left_score),
+    [right, setRight] = useState(match.right_score),
+    [time, setTime] = useState(Math.ceil(match.remaining_ms / 1000)),
+    [target, setTarget] = useState(match.target_score),
+    [outcome, setOutcome] = useState(match.result_override ?? ""),
+    [resume, setResume] = useState(false);
+  const controls = (
+    label: string,
+    value: number,
+    change: (n: number) => void,
+    step = 1,
+    max = 30000,
+  ) => (
+    <div className="stepper">
+      <span>
+        {label}:{" "}
+        <strong>
+          {label === "Remaining time" ? clockText(value * 1000) : value}
+        </strong>
+      </span>
+      <button
+        type="button"
+        disabled={busy || value <= 0}
+        aria-label={`Decrease ${label}`}
+        onClick={() => change(Math.max(0, value - step))}
+      >
+        ↓
+      </button>
+      <button
+        type="button"
+        disabled={busy || value >= max}
+        aria-label={`Increase ${label}`}
+        onClick={() => change(Math.min(max, value + step))}
+      >
+        ↑
+      </button>
+    </div>
+  );
+  const dirty =
+    left !== match.left_score ||
+    right !== match.right_score ||
+    time !== Math.ceil(match.remaining_ms / 1000) ||
+    target !== match.target_score ||
+    outcome !== (match.result_override ?? "") ||
+    resume;
+  return (
+    <section>
+      <h3>Admin Mode — staged changes</h3>
+      <p>Changes apply together when saved. The timer remains paused.</p>
+      <div className="fields">
+        {controls("Left score", left, setLeft)}
+        {controls("Right score", right, setRight)}
+        <div>
+          <strong>Remaining time: {clockText(time * 1000)}</strong>
+          {(
+            [
+              ["Remaining minutes", 60],
+              ["Remaining seconds", 1],
+            ] as const
+          ).map(([label, step]) => (
+            <div className="stepper" key={label}>
+              <span>{label}</span>
+              <button
+                type="button"
+                aria-label={`Decrease ${label}`}
+                disabled={busy || time <= 0}
+                onClick={() => setTime((t) => Math.max(0, t - step))}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                aria-label={`Increase ${label}`}
+                disabled={
+                  busy ||
+                  time >= (match.is_overtime ? match.overtime_ms / 1000 : 10800)
+                }
+                onClick={() =>
+                  setTime((t) =>
+                    Math.min(
+                      match.is_overtime ? match.overtime_ms / 1000 : 10800,
+                      t + step,
+                    ),
+                  )
+                }
+              >
+                ↑
+              </button>
+            </div>
+          ))}
+        </div>
+        {controls(
+          "Score to Win",
+          target ?? 0,
+          (v) => setTarget(v === 0 ? null : v),
+          1,
+          10000,
+        )}
+        <p>{target === null ? "No target" : "Match-specific target"}</p>
+      </div>
+      <h4 className="assign-winner">Assign Winner</h4>
+      <div className="assign-winner button-row">
+        {[
+          ["left", "← Left Victory"],
+          ["draw", "Draw"],
+          ["incomplete", "Incomplete"],
+          ["right", "Right Victory →"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            className={outcome === value ? "selected" : ""}
+            disabled={busy}
+            onClick={() => setOutcome(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <button disabled={busy} onClick={() => setOutcome("")}>
+        Use score-derived result
+      </button>
+      {match.finalized_at && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={resume}
+            onChange={(e) => setResume(e.target.checked)}
+          />
+          Resume / reopen this match (no automatic timer start)
+        </label>
+      )}
+      <div className="button-row">
+        <button disabled={busy || dirty} onClick={onCard}>
+          Card penalty…
+        </button>
+        <button
+          className="primary"
+          disabled={busy}
+          onClick={() => {
+            if (
+              outcome === "incomplete" &&
+              !confirm(
+                "Save this match as Incomplete? It will credit no result or advancement.",
+              )
+            )
+              return;
+            void onApply({
+              leftScore: left,
+              rightScore: right,
+              remainingMs: time * 1000,
+              targetScore: target,
+              outcome,
+              resume,
+            });
+          }}
+        >
+          Apply & close Admin Mode
+        </button>
+        <button disabled={busy} onClick={onCancel}>
+          Cancel / discard
+        </button>
+      </div>
+      {dirty && <p>Apply or discard staged changes before recording a card.</p>}
+    </section>
+  );
+}
+function Penalty({
+  feedback,
+  match,
+  config,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  match: LiveMatch;
+  config?: Configuration;
+  busy: boolean;
+  onCancel: () => void;
+  feedback?: ReactNode;
+  onConfirm: (d: Record<string, unknown>) => Promise<boolean>;
+}) {
+  const [side, setSide] = useState<Side>("left"),
+    [card, setCard] = useState("Yellow"),
+    [reason, setReason] = useState(""),
+    [points, setPoints] = useState(1);
+  const [history, setHistory] = useState<Operation[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!match.event_id) return;
+    let alive = true;
+    void (async () => {
+      const ids: string[] = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await db()
+          .from("tTraditionalMatch")
+          .select("id")
+          .eq("event_id", match.event_id!)
+          .order("id")
+          .range(offset, offset + 999);
+        if (error) throw error;
+        ids.push(...(data ?? []).map((m) => m.id));
+        if (data.length < 1000) break;
+      }
+      const ops: Operation[] = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        for (let offset = 0; ; offset += 1000) {
+          const { data, error } = await db()
+            .from("tMatchOperation")
+            .select("*")
+            .in("match_id", ids.slice(i, i + 100))
+            .in("kind", ["penalty", "reverse"])
+            .order("id")
+            .range(offset, offset + 999);
+          if (error) throw error;
+          ops.push(...data);
+          if (data.length < 1000) break;
+        }
+      }
+      if (alive) setHistory(ops);
+    })().catch((e) => {
+      if (alive) setError(message(e));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [match.event_id]);
+  const reversed = new Set(
+    history.filter((o) => o.kind === "reverse").map((o) => o.data.operationId),
+  );
+  return (
+    <Dialog title="Assign card penalty" onClose={onCancel}>
+      {feedback}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onConfirm({ side, card, reason, points });
+        }}
+      >
+        <label>
+          Fencer being penalized
+          <select
+            value={side}
+            onChange={(e) => setSide(e.target.value as Side)}
+          >
+            <option value="left">{match.current_left_name} (left)</option>
+            <option value="right">{match.current_right_name} (right)</option>
+          </select>
+        </label>
+        <fieldset>
+          <legend>Card</legend>
+          <div className="button-row">
+            {["Yellow", "Red", "Black", "Double Black"].map((c) => (
+              <button
+                type="button"
+                aria-pressed={card === c}
+                className={card === c ? "selected" : ""}
+                key={c}
+                onClick={() => setCard(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Reason</legend>
+          <div className="reason-tiles">
+            {(config?.penalty_reasons ?? ["Safety", "Power"]).map((r) => (
+              <button
+                type="button"
+                aria-pressed={reason === r}
+                className={reason === r ? "selected" : ""}
+                key={r}
+                onClick={() => setReason(r)}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <label>
+          Points awarded to{" "}
+          {side === "left" ? match.current_right_name : match.current_left_name}
+          <input
+            type="number"
+            min={0}
+            max={10000}
+            required
+            value={points}
+            onChange={(e) => setPoints(Number(e.target.value))}
+          />
+        </label>
+        <p>No automatic disqualification is applied.</p>
+        <Notice error={error} />
+        {match.event_id ? (
+          <>
+            <h4>Cards in this event</h4>
+            {(["left", "right"] as const).map((s) => (
+              <section key={s}>
+                <strong>
+                  {s === "left"
+                    ? match.current_left_name
+                    : match.current_right_name}
+                </strong>
+                {history
+                  .filter(
+                    (o) =>
+                      o.kind === "penalty" &&
+                      o.data.sanctionedFencerId ===
+                        (s === "left"
+                          ? match.left_fencer_id
+                          : match.right_fencer_id),
+                  )
+                  .map((o) => (
+                    <p key={o.id}>
+                      {operationLabel(o)} ·{" "}
+                      {new Date(o.recorded_at).toLocaleString()}
+                      {reversed.has(o.id) ? " · Reversed" : ""}
+                    </p>
+                  ))}
+                {!history.some(
+                  (o) =>
+                    o.kind === "penalty" &&
+                    o.data.sanctionedFencerId ===
+                      (s === "left"
+                        ? match.left_fencer_id
+                        : match.right_fencer_id),
+                ) && <p>No prior cards.</p>}
+              </section>
+            ))}
+          </>
+        ) : (
+          <p>Standalone match — no event card record.</p>
+        )}
+        <div className="button-row">
+          <button className="primary" disabled={busy || !reason}>
+            Confirm card & award points
+          </button>
+          <button type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+function Dialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    ref.current?.showModal();
+    return () => {
+      ref.current?.close();
+      if (previous instanceof HTMLElement) previous.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="match-dialog"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      <header>
+        <h2>{title}</h2>
+        <button aria-label={`Close ${title}`} onClick={onClose}>
+          ×
+        </button>
+      </header>
+      {children}
+    </dialog>
+  );
+}
+function exportCsv(match: LiveMatch, operations: Operation[]) {
+  const quote = (value: unknown) =>
+    `"${String(value ?? "")
+      .replace(/^[=+\-@]/, "'$&")
+      .replaceAll('"', '""')}"`;
+  const rows = [
+    ["UTC", "Actor", "Operation", "Left after", "Right after"],
+    ...operations.map((o) => [
+      o.recorded_at,
+      o.actor_id,
+      operationLabel(o),
+      o.left_after,
+      o.right_after,
+    ]),
+  ];
+  const url = URL.createObjectURL(
+    new Blob(
+      ["\ufeff" + rows.map((r) => r.map(quote).join(",")).join("\r\n")],
+      { type: "text/csv;charset=utf-8" },
+    ),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `match-${match.id}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

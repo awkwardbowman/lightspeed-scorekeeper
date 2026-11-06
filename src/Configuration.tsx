@@ -4,10 +4,8 @@ import { Intro, Notice, useAction, useRows } from "./ui";
 const actions = [
   "toggle",
   "undo",
-  ...["left", "right"].flatMap((s) =>
-    ["indirect", "clean", "counter"].flatMap((t) =>
-      [1, 3, 5].map((p) => `${s}.${t}.${p}`),
-    ),
+  ...["left", "right"].flatMap((side) =>
+    ["indirect.1", "clean.3", "counter.5"].map((call) => `${side}.${call}`),
   ),
 ];
 export default function Configuration({
@@ -21,6 +19,8 @@ export default function Configuration({
     await r.reload();
     await teams.reload();
   });
+  const [reasons, setReasons] = useState("Safety\nPower");
+  const [overtime, setOvertime] = useState(60);
   const [order, setOrder] = useState<string[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [id, setId] = useState("");
@@ -29,7 +29,15 @@ export default function Configuration({
   useEffect(() => {
     if (r.data[0]) {
       setOrder(r.data[0].tiebreakers);
-      setKeys(r.data[0].key_mappings);
+      setReasons((r.data[0].penalty_reasons ?? ["Safety", "Power"]).join("\n"));
+      setOvertime((r.data[0].overtime_ms ?? 60000) / 1000);
+      setKeys(
+        Object.fromEntries(
+          Object.entries(r.data[0].key_mappings).filter(([key]) =>
+            actions.includes(key),
+          ),
+        ),
+      );
     }
   }, [r.data]);
   const team = teams.data.find((t) => t.id === id);
@@ -65,6 +73,52 @@ export default function Configuration({
       <section className="card">
         {kind === "general" && (
           <>
+            <h3>Card penalty reasons</h3>
+            <label>
+              Selectable reason tiles (one per line)
+              <textarea
+                value={reasons}
+                onChange={(e) => setReasons(e.target.value)}
+              />
+            </label>
+            <label>
+              Knockout overtime maximum (seconds)
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={overtime}
+                onChange={(e) => setOvertime(Number(e.target.value))}
+              />
+            </label>
+            <button
+              disabled={a.busy}
+              onClick={() =>
+                void a.run(() =>
+                  write(
+                    "tConfiguration",
+                    {
+                      penalty_reasons: [
+                        ...new Set(
+                          reasons
+                            .split("\n")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        ),
+                      ],
+                      overtime_ms: Math.round(overtime * 1000),
+                    },
+                    "true",
+                  ),
+                )
+              }
+            >
+              Save match configuration
+            </button>
+            <p>
+              Overtime is sudden death. New matches capture this duration;
+              existing matches keep their snapshot.
+            </p>
             <h3>Standings tiebreak priority</h3>
             <p>
               Match wins always rank first. Choose secondary criteria in order.

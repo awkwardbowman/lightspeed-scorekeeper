@@ -1,5 +1,6 @@
-import { Account, Fencers, Presets, Users } from "./Management";
-import { Events, Teams, RunEvent } from "./Events";
+import { RecordPage } from "./RecordPages";
+import { Account } from "./Management";
+import { RunEvent } from "./Events";
 import { History } from "./History";
 import Configuration from "./Configuration";
 import { Intro } from "./ui";
@@ -48,15 +49,15 @@ export default function Pages({ route }: { route: Route }) {
     case "/account":
       return <Account />;
     case "/users":
-      return <Users />;
+      return <RecordPage entity="users" />;
     case "/fencers":
-      return <Fencers />;
+      return <RecordPage entity="fencers" />;
     case "/presets":
-      return <Presets />;
+      return <RecordPage entity="presets" />;
     case "/events":
-      return <Events />;
+      return <RecordPage entity="events" />;
     case "/events/teams":
-      return <Teams />;
+      return <RecordPage entity="teams" />;
     case "/run-event":
     case "/run-event/matches":
     case "/run-event/matches/run":

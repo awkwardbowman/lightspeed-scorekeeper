@@ -66,7 +66,10 @@ function Workspace() {
         <Pages key={route} route={route} />
       </section>
       <section className="app-screen" hidden={route !== "/single-match"}>
-        <Scorekeeper key={`${profile.id}:${matchKey}`} />
+        <Scorekeeper
+          active={route === "/single-match"}
+          key={`${profile.id}:${matchKey}`}
+        />
       </section>
       <footer className="site-footer">
         Lightspeed Scorekeeper · <a href="#/">Dashboard</a>

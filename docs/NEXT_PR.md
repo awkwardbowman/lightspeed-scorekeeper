@@ -1,6 +1,6 @@
 # Next PR: management pages and Traditional match redesign
 
-Status: setup and dependency review, 2026-11-06. No implementation or production changes in this setup commit.
+Status: implemented and locally verified in draft PR #5, 2026-11-06. Hosted migration, merge and deployment remain pending. See DESIGN.md §6H and RELEASE.md.
 
 ## Source and baseline
 
@@ -69,11 +69,11 @@ Unresolved:
 - Candidate card types named by the owner: Yellow, Red, Black and Double Black. Their official meaning, automatic disqualification effects and point restrictions are not confirmed. Do not invent sanctions from the names.
 - RESOLVED: Popup Confirm directly commits the card and selected opponent penalty points together; Cancel commits nothing.
 - CONFIRMED MATCH TYPE: Explicit Standard / Knockout classification, shown on the live scoreboard as part of the win condition; example: "Standard | First to 12 Points". A tied Knockout match enters overtime at time expiry rather than being finalized as a draw. Event phase context must select the appropriate type; do not confuse competition type with Traditional / Control Point scoring mode.
-- CONFIRMED OVERTIME: Knockout overtime is sudden death: first score wins, with a maximum of one minute (initial default; overtime-duration configuration remains in scope). Preserve the scoreboard and clearly identify overtime. The proposed paused entry/tap-to-start clock and lightly pulsing red border have not been explicitly confirmed; support reduced motion if the pulse is adopted. Behavior after a scoreless overtime minute is UNKNOWN and must not be invented. Stop the timer at zero, retain the unresolved tie and require an explicit resolution before any winner advances; this stop-and-flag handling is a proposed safe fallback pending owner confirmation. Target-reached ties and corrections/reversals of an overtime-winning score still require precise lifecycle handling.
+- CONFIRMED OVERTIME: Knockout overtime is sudden death: first score wins, with a maximum of one minute (initial default; overtime-duration configuration remains in scope). Preserve the scoreboard and clearly identify overtime. The proposed paused entry/tap-to-start clock and lightly pulsing red border have not been explicitly confirmed; support reduced motion if the pulse is adopted. Behavior after a scoreless overtime minute is UNKNOWN and must not be invented. Stop the timer at zero, retain the unresolved tie and require an explicit resolution before any winner advances; this stop-and-flag handling is confirmed by the owner pending judges’ official guidance. Target-reached ties and corrections/reversals of an overtime-winning score still require precise lifecycle handling.
 - Whichever option is chosen, an unresolved knockout tie must not select an arbitrary advancing winner. Run Event should identify questionable results before generating a bracket or advancing dependent fixtures.
 
 
-Overtime acceptance: show Standard / Knockout beside the win condition; tied Knockout expiry enters sudden death, first score wins, capped at one minute. Scoreless overtime expiry remains an open product decision; no arbitrary advancing winner.
+Overtime acceptance: show Standard / Knockout beside the win condition; tied Knockout expiry enters sudden death, first score wins, capped at one minute. Scoreless overtime expiry stops with Winner unresolved and blocks advancement, as confirmed by the owner pending judges’ guidance.
 
 ## Scope boundaries
 

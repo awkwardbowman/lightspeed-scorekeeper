@@ -203,7 +203,8 @@ export const titles: Record<Route, string> = {
 const routeSet: ReadonlySet<string> = new Set(ALL_ROUTES);
 export function readRoute(): Route {
   const value =
-    window.location.hash.replace(/^#/, "").replace(/\/$/, "") || "/";
+    window.location.hash.split("?")[0].replace(/^#/, "").replace(/\/$/, "") ||
+    "/";
   return routeSet.has(value) ? (value as Route) : "/";
 }
 
