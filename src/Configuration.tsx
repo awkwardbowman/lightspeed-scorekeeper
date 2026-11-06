@@ -1,53 +1,40 @@
 import { useEffect, useState } from "react";
-import { db, type Configuration as Config, type Team, write } from "./data";
+import { db, type Configuration as Config, write } from "./data";
 import { Intro, Notice, useAction, useRows } from "./ui";
 const actions = [
   "toggle",
   "undo",
-  ...["left", "right"].flatMap((s) =>
-    ["indirect", "clean", "counter"].flatMap((t) =>
-      [1, 3, 5].map((p) => `${s}.${t}.${p}`),
-    ),
+  ...["left", "right"].flatMap((side) =>
+    ["indirect.1", "clean.3", "counter.5"].map((call) => `${side}.${call}`),
   ),
 ];
 export default function Configuration({
   kind,
 }: {
-  kind: "general" | "key-mappings" | "team-images";
+  kind: "general" | "key-mappings";
 }) {
   const r = useRows<Config>("tConfiguration");
-  const teams = useRows<Team>("tTeam");
   const a = useAction(async () => {
     await r.reload();
-    await teams.reload();
   });
+  const [reasons, setReasons] = useState("Safety\nPower");
+  const [overtime, setOvertime] = useState(60);
   const [order, setOrder] = useState<string[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
-  const [id, setId] = useState("");
-  const [url, setUrl] = useState("");
-  const [preview, setPreview] = useState("");
   useEffect(() => {
     if (r.data[0]) {
       setOrder(r.data[0].tiebreakers);
-      setKeys(r.data[0].key_mappings);
+      setReasons((r.data[0].penalty_reasons ?? ["Safety", "Power"]).join("\n"));
+      setOvertime((r.data[0].overtime_ms ?? 60000) / 1000);
+      setKeys(
+        Object.fromEntries(
+          Object.entries(r.data[0].key_mappings).filter(([key]) =>
+            actions.includes(key),
+          ),
+        ),
+      );
     }
   }, [r.data]);
-  const team = teams.data.find((t) => t.id === id);
-  useEffect(() => {
-    let mounted = true;
-    setPreview("");
-    if (team?.image_path)
-      void db()
-        .storage.from("team-images")
-        .createSignedUrl(team.image_path, 3600)
-        .then(({ data }) => {
-          if (mounted) setPreview(data?.signedUrl ?? "");
-        });
-    else setPreview(team?.image_url ?? "");
-    return () => {
-      mounted = false;
-    };
-  }, [team]);
   return (
     <>
       <Intro
@@ -61,10 +48,56 @@ export default function Configuration({
       >
         Shared settings for all Management and Admin users. Changes are audited.
       </Intro>
-      <Notice error={r.error || teams.error} loading={r.loading} />
+      <Notice error={r.error} loading={r.loading} />
       <section className="card">
         {kind === "general" && (
           <>
+            <h3>Card penalty reasons</h3>
+            <label>
+              Selectable reason tiles (one per line)
+              <textarea
+                value={reasons}
+                onChange={(e) => setReasons(e.target.value)}
+              />
+            </label>
+            <label>
+              Knockout overtime maximum (seconds)
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={overtime}
+                onChange={(e) => setOvertime(Number(e.target.value))}
+              />
+            </label>
+            <button
+              disabled={a.busy}
+              onClick={() =>
+                void a.run(() =>
+                  write(
+                    "tConfiguration",
+                    {
+                      penalty_reasons: [
+                        ...new Set(
+                          reasons
+                            .split("\n")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        ),
+                      ],
+                      overtime_ms: Math.round(overtime * 1000),
+                    },
+                    "true",
+                  ),
+                )
+              }
+            >
+              Save match configuration
+            </button>
+            <p>
+              Overtime is sudden death. New matches capture this duration;
+              existing matches keep their snapshot.
+            </p>
             <h3>Standings tiebreak priority</h3>
             <p>
               Match wins always rank first. Choose secondary criteria in order.
@@ -186,110 +219,6 @@ export default function Configuration({
             >
               Save shared mappings
             </button>
-          </>
-        )}
-        {kind === "team-images" && (
-          <>
-            <label>
-              Reusable team
-              <select
-                value={id}
-                onChange={(e) => {
-                  setId(e.target.value);
-                  setUrl(
-                    teams.data.find((t) => t.id === e.target.value)
-                      ?.image_url ?? "",
-                  );
-                }}
-              >
-                <option value="">Select team</option>
-                {teams.data
-                  .filter((t) => !t.is_archived)
-                  .map((t) => (
-                    <option value={t.id} key={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            {id && (
-              <>
-                <label>
-                  External image URL
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://…"
-                  />
-                </label>
-                <button
-                  className="primary"
-                  disabled={a.busy}
-                  onClick={() =>
-                    void a.run(async () => {
-                      const parsed = new URL(url);
-                      if (
-                        parsed.protocol !== "https:" ||
-                        parsed.username ||
-                        parsed.password
-                      )
-                        throw new Error("Use an HTTPS image URL.");
-                      await write(
-                        "tTeam",
-                        { image_url: parsed.href, image_path: null },
-                        id,
-                      );
-                    })
-                  }
-                >
-                  Save image URL
-                </button>
-                <label>
-                  Or upload PNG, JPEG or WebP (maximum 2 MB)
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    disabled={a.busy}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      void a.run(async () => {
-                        if (
-                          !["image/png", "image/jpeg", "image/webp"].includes(
-                            file.type,
-                          ) ||
-                          file.size > 2 * 1024 * 1024
-                        )
-                          throw new Error(
-                            "Choose a PNG, JPEG or WebP no larger than 2 MB.",
-                          );
-                        const bitmap = await createImageBitmap(file);
-                        bitmap.close();
-                        const path = `${id}/${crypto.randomUUID()}.${file.type === "image/png" ? "png" : file.type === "image/jpeg" ? "jpg" : "webp"}`;
-                        const { error } = await db()
-                          .storage.from("team-images")
-                          .upload(path, file, { contentType: file.type });
-                        if (error) throw error;
-                        await write(
-                          "tTeam",
-                          { image_path: path, image_url: null },
-                          id,
-                        );
-                      });
-                    }}
-                  />
-                </label>
-                {preview && (
-                  <img
-                    className="team-preview"
-                    src={preview}
-                    alt={`${team?.name} team image`}
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-              </>
-            )}
           </>
         )}
         <Notice error={a.status} />

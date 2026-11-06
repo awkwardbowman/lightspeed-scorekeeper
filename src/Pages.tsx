@@ -1,5 +1,8 @@
-import { Account, Fencers, Presets, Users } from "./Management";
-import { Events, Teams, RunEvent } from "./Events";
+import Teams from "./Teams";
+import ImageLibrary from "./Images";
+import { RecordPage } from "./RecordPages";
+import { Account } from "./Management";
+import { RunEvent } from "./Events";
 import { History } from "./History";
 import Configuration from "./Configuration";
 import { Intro } from "./ui";
@@ -48,13 +51,13 @@ export default function Pages({ route }: { route: Route }) {
     case "/account":
       return <Account />;
     case "/users":
-      return <Users />;
+      return <RecordPage entity="users" />;
     case "/fencers":
-      return <Fencers />;
+      return <RecordPage entity="fencers" />;
     case "/presets":
-      return <Presets />;
+      return <RecordPage entity="presets" />;
     case "/events":
-      return <Events />;
+      return <RecordPage entity="events" />;
     case "/events/teams":
       return <Teams />;
     case "/run-event":
@@ -75,7 +78,7 @@ export default function Pages({ route }: { route: Route }) {
     case "/configuration/key-mappings":
       return <Configuration kind="key-mappings" />;
     case "/configuration/team-images":
-      return <Configuration kind="team-images" />;
+      return <ImageLibrary />;
     case "/single-match":
       return null;
   }

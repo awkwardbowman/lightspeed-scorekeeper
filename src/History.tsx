@@ -1,5 +1,10 @@
+import { TeamBadge } from "./Teams";
+import MatchLog from "./MatchLog";
+import { type Operation } from "./liveMatch";
 import { useState } from "react";
 import {
+  type TeamInstance,
+  type ImageAsset,
   type EventRecord,
   type Fencer,
   type MatchRow,
@@ -15,6 +20,7 @@ import {
   useRows,
 } from "./ui";
 export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
+  const operations = useRows<Operation>("tMatchOperation");
   const events = useRows<EventRecord>("tEvent");
   const fencers = useRows<Fencer>("tFencer");
   const matches = useRows<MatchRow>("vMatchResults");
@@ -65,6 +71,11 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
     configuration: unknown;
     group_standings: Record<string, { name: string; standings: Standing[] }>;
     participants: Fencer[];
+    team_snapshot:
+      | (TeamInstance & {
+          members: { id: string; fencer_id: string; fencer_name: string }[];
+        })[]
+      | null;
   }>("tEventFinalization");
   const phases = useRows<{
     id: string;
@@ -82,7 +93,8 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
     is_archived: boolean;
     graph: unknown;
   }>("tBracket");
-  const teams = useRows<{ id: string; name: string }>("tTeam");
+  const teams = useRows<TeamInstance>("vTeamInstances");
+  const assets = useRows<ImageAsset>("tImageAsset");
   const memberships = useRows<{
     event_id: string;
     team_id: string;
@@ -212,7 +224,41 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   ))}
               </section>
             ))}
-            <h4>Event rosters</h4>
+            <h4>Team instances and current rosters</h4>
+            {teams.data
+              .filter((t) => t.event_id === id)
+              .map((t) => (
+                <article className="card" key={t.id}>
+                  <TeamBadge team={t} assets={assets.data} />
+                  <a href={`#/events/teams?mode=roster&id=${t.id}`}>
+                    Current / historical roster
+                  </a>{" "}
+                  ·{" "}
+                  <a href={`#/events/teams?mode=history&id=${t.id}`}>
+                    Team lineage and history
+                  </a>
+                </article>
+              ))}
+            {snap?.team_snapshot && (
+              <>
+                <h4>Frozen team rosters at selected finalization</h4>
+                {snap.team_snapshot.map((t) => (
+                  <article className="card" key={t.id}>
+                    <TeamBadge team={t} assets={assets.data} />
+                    <ul>
+                      {t.members.map((m) => (
+                        <li key={m.id}>
+                          {m.fencer_name} · {m.fencer_id}
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
+              </>
+            )}
+            <h4>
+              Legacy event roster evidence (before team-instance migration)
+            </h4>
             {memberships.data
               .filter((m) => m.event_id === id)
               .map((m) => (
@@ -401,6 +447,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 downloadJson(`match-${match.id}.json`, {
                   match,
                   calls: calls.data.filter((c) => c.match_id === match.id),
+                  operations: operations.data.filter(
+                    (o) => o.match_id === match.id,
+                  ),
                   audit: audit.data.filter(
                     (a) =>
                       a.record_id === match.id ||
@@ -414,7 +463,14 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               Export full report
             </button>
           </div>
-          <h4>Scoring timeline</h4>
+          <h4>Audited match operations</h4>
+          <Notice error={operations.error} />
+          <MatchLog
+            operations={operations.data
+              .filter((o) => o.match_id === match.id)
+              .sort((a, b) => a.sequence - b.sequence)}
+          />
+          <h4>Original calls (including reversals)</h4>
           <div className="table-wrap">
             <table>
               <thead>

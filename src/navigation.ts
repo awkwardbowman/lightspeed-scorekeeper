@@ -154,8 +154,8 @@ export const historyTiles: NavTile[] = [
 export const configurationTiles: NavTile[] = [
   {
     route: "/configuration/team-images",
-    title: "Team Images",
-    description: "Upload and assign team logos or photos.",
+    title: "Image Library",
+    description: "Upload optimized images and reuse team logos.",
     icon: "▧",
     status: "planned",
   },
@@ -195,7 +195,7 @@ export const titles: Record<Route, string> = {
   "/history/matches": "Match History",
   "/history/fencers": "Fencer History",
   "/configuration": "Configuration",
-  "/configuration/team-images": "Team Images",
+  "/configuration/team-images": "Image Library",
   "/configuration/key-mappings": "Key Mappings",
   "/configuration/general": "General Settings",
 };
@@ -203,7 +203,8 @@ export const titles: Record<Route, string> = {
 const routeSet: ReadonlySet<string> = new Set(ALL_ROUTES);
 export function readRoute(): Route {
   const value =
-    window.location.hash.replace(/^#/, "").replace(/\/$/, "") || "/";
+    window.location.hash.split("?")[0].replace(/^#/, "").replace(/\/$/, "") ||
+    "/";
   return routeSet.has(value) ? (value as Route) : "/";
 }
 

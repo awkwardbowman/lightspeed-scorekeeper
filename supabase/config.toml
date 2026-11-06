@@ -15,3 +15,7 @@ uri = "pg-functions://postgres/public/scorekeeper_block_email"
 
 [functions.manage-users]
 verify_jwt = true
+
+[functions.image-assets]
+verify_jwt = true
+static_files = ["./functions/image-assets/vendor/webp_dec.wasm"]

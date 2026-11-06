@@ -1,22 +1,7 @@
 import { useState } from "react";
 import { PasswordForm, useAccount } from "./Auth";
-import {
-  db,
-  manage,
-  write,
-  type Fencer,
-  type Preset,
-  type Profile,
-} from "./data";
-import {
-  ArchiveFilter,
-  DeleteButton,
-  Intro,
-  Notice,
-  Search,
-  useAction,
-  useRows,
-} from "./ui";
+import { db, manage } from "./data";
+import { Intro, Notice, useAction } from "./ui";
 export function Account() {
   const { profile, refresh } = useAccount();
   const [name, setName] = useState(profile.display_name);

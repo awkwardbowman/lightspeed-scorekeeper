@@ -10,8 +10,14 @@ Authentication is mandatory, including standalone matches. Active managers and A
 
 ## Validate
 
-- `npm test` runs a PostgreSQL 17 migration/security/scoring suite in disposable PGlite, plus tournament simulations for 2–128 entrants.
-- `npm run build` checks TypeScript and builds the Vite application.
+- `npm run test:smoke` runs the production build and critical match/tournament smoke tests.
+- `npm run test:changed -- --base=origin/main` selects suites from changed files; add `--browser` for relevant UI coverage.
+- `npm run test:select -- --scope=teams,images` selects feature tests, while `--only=images` explicitly overrides the baseline.
+- `npm run test:integration` runs the production build and all six non-browser suites.
+- `npm run test:full` also runs the Chromium browser suite (after `npx playwright install chromium`).
+- `npm test` retains the historical six-suite non-browser command; `npm run build` separately type-checks and bundles the app.
+
+See [docs/TESTING.md](docs/TESTING.md) for risk classes, level gates, affected-area rules, CI, and release verification.
 
 ## Release
 
@@ -30,3 +36,9 @@ A match has one referee claim, with a 90-second lease renewed by checkpoints. A 
 ## Scope
 
 The consolidated requirements are in [docs/DESIGN.md](docs/DESIGN.md). Control Point and Traditional team match execution remain disabled pending their rules. Reusable teams, event-scoped rosters and team images are supported. Head-to-head tiebreak semantics remain deferred; global configuration supports point differential and total points after wins, without an assumed default order.
+
+## Team instances and image library (PR #6)
+
+Teams have independent event entries linked by shared lineage. Clone a previous team to copy active roster members and logo/color assignments; roster edits retain membership history. Team and Event pages share guarded event assignment. Team scoring and Control Point execution remain disabled.
+
+Configuration → Image Library uploads optimized WebP images for reuse. Team Create/Edit includes the same upload/selection flow and a color preview. Review [docs/TEAM_IMAGES_RELEASE.md](docs/TEAM_IMAGES_RELEASE.md) before releasing: the migration and trusted image endpoint must precede the client.
