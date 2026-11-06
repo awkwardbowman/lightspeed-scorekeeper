@@ -1,0 +1,16 @@
+project_id = "lightspeed-scorekeeper"
+
+[auth]
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+
+# Enable on the hosted project after the Admin has set and tested a password.
+# A hosted SQL migration does not, by itself, activate Auth hook configuration.
+[auth.hook.send_email]
+enabled = true
+uri = "pg-functions://postgres/public/scorekeeper_block_email"
+
+[functions.manage-users]
+verify_jwt = true

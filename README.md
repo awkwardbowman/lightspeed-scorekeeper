@@ -1,47 +1,32 @@
 # Lightspeed Scorekeeper
 
-A lightweight, responsive scoring app for Lightspeed-style lightsaber fencing matches.
+Referee-operated Traditional lightsaber fencing, with shared Management records, event groups and brackets, detailed history, and a single Admin.
 
-## Start the app
+## Develop
 
-Install [Node.js](https://nodejs.org/) (current LTS), then from this folder:
+Use Node.js LTS, run `npm ci`, and copy `.env.example` to `.env.local`. Supply the project's public URL and publishable key; never put a Supabase service-role key in a `VITE_` variable. Then run `npm run dev`.
 
-```bash
-npm install
-npm run dev
-```
+Authentication is mandatory, including standalone matches. Accounts are provisioned by the Admin. The initial Admin may use an existing authenticated session to set their password under My account. No public signup or email recovery UI is provided.
 
-Open the local address that Vite prints (usually `http://localhost:5173`).
+## Validate
 
-## Deploy
+- `npm test` runs a PostgreSQL 17 migration/security/scoring suite in disposable PGlite, plus tournament simulations for 2–128 entrants.
+- `npm run build` checks TypeScript and builds the Vite application.
 
-Push this project to `awkwardbowman/lightspeed-scorekeeper`, then in Vercel select **Add New → Project → Import Git Repository**. Framework should auto-detect as **Vite**; build command `npm run build`, output directory `dist`. No environment variables are required.
+## Release
 
-## Scoring
+Follow [docs/RELEASE.md](docs/RELEASE.md) before deploying. This release changes database permissions and match persistence; it must not be deployed independently of its migration and trusted account endpoint.
 
-1. Enter fencer names and optionally match/event/round details, set duration and optional target score.
-2. Start the timer. Pause before making each call.
-3. While paused, record an indirect, clean hit, or counter worth 1, 3, or 5 points for either fencer; resume.
-4. The match ends when time runs out or a target score is reached. It remains on screen until you select **Match report**.
-5. View category counts, export CSV, or print the report.
+The existing Vercel project is `lightspeed-scorekeeper`; GitHub `main` deploys automatically. Environment variables are `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
-The match is saved in your browser only; this is not multi-device synchronization. Starting a new match **replaces** the previous local match. Export first.
+## Workflow
 
-Detailed scope and future enhancements: [docs/DESIGN.md](docs/DESIGN.md).
+Create fencers and Traditional presets, then run standalone matches or create an event. Register event fencers, assign groups manually, generate group round-robin fixtures, and deliberately select bracket entrants in placement order. Single and double elimination include byes and grand-final reset matches. Advance resolved brackets from Run Event.
 
-## Cloud match storage (optional)
+Pause before scoring. Indirect, clean hit and counter each support 1, 3 and 5 points. Time or target limits leave scoring/corrections available. Match Report finalizes a result only after a successful transactional save. Knockout ties require a referee-selected tiebreak winner. Manual stopping is conservatively recorded as no result until those outcome rules are settled.
 
-The app runs locally without cloud credentials. Supabase adds email sign-in,
-manual save of the current Traditional match, and loading saved matches on
-another device. The timer is **never** resumed automatically by a cloud load.
+A match has one referee claim, with a 90-second lease renewed by checkpoints. A new controller must explicitly recover an expired claim. Saves are serialized, revision-checked and retriable without duplicating calls. Refresh pauses the clock, and user-scoped local snapshots retain unsaved state. Corrections, archives and configuration changes retain audit records.
 
-1. Install dependencies: `npm install @supabase/supabase-js` (commit both package.json and package-lock.json).
-2. For local testing, copy `.env.example` to `.env.local` and fill in the **publishable** Supabase key from Project Settings > API Keys. Never use service role/secret keys in a Vite app.
-3. On the Supabase Auth > URL Configuration page, set Site URL to `https://lightspeed-scorekeeper.vercel.app` and add `http://localhost:5173` to the redirect allow list. Add a different localhost or preview URL only if you actually use it.
-4. The hosted Vercel project already has `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` configured. Push to `main` to build with them.
-5. Enter your email in Cloud storage, follow the sign-in link, pause the match, click **Save current match to cloud**, then use **Load selected** to restore it.
+## Scope
 
-Cloud operations currently affect `tTraditionalMatch` and `tTraditionalCall` only.
-Future event, roster, team, and Control Point editors will use the same
-`src/db/supabase.ts` connection. Cloud saving is deliberately manual; live
-multidevice editing and autosave are not implemented yet.
+The consolidated requirements are in [docs/DESIGN.md](docs/DESIGN.md). Control Point and Traditional team match execution remain disabled pending their rules. Reusable teams, event-scoped rosters and team images are supported. Head-to-head tiebreak semantics remain deferred; global configuration supports point differential and total points after wins, without an assumed default order.

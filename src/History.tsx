@@ -1,0 +1,477 @@
+import { useState } from "react";
+import {
+  type EventRecord,
+  type Fencer,
+  type MatchRow,
+  type Standing,
+} from "./data";
+import { EventPicker, StandingsTable } from "./Events";
+import {
+  ArchiveFilter,
+  downloadJson,
+  Intro,
+  Notice,
+  Search,
+  useRows,
+} from "./ui";
+export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
+  const events = useRows<EventRecord>("tEvent");
+  const fencers = useRows<Fencer>("tFencer");
+  const matches = useRows<MatchRow>("vMatchResults");
+  const calls = useRows<{
+    id: string;
+    match_id: string;
+    side: string;
+    call_type: string;
+    points: number;
+    match_time_ms: number;
+    recorded_at: string;
+    is_reversed: boolean;
+  }>("tTraditionalCall");
+  const audit = useRows<{
+    id: string;
+    record_id: string;
+    table_name: string;
+    action: string;
+    actor_id: string | null;
+    old_value: unknown;
+    new_value: unknown;
+    recorded_at: string;
+  }>("tAudit");
+  const stats = useRows<{
+    fencer_id: string;
+    display_name: string;
+    scope: string;
+    matches: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    points_for: number;
+    points_against: number;
+  }>("vFencerStatistics");
+  const scoring = useRows<{
+    fencer_id: string;
+    scope: string;
+    call_type: string;
+    points: number;
+    calls: number;
+    total_points: number;
+  }>("vFencerScoring");
+  const snapshots = useRows<{
+    id: string;
+    event_id: string;
+    created_at: string;
+    standings: Standing[];
+    configuration: unknown;
+    group_standings: Record<string, { name: string; standings: Standing[] }>;
+    participants: Fencer[];
+  }>("tEventFinalization");
+  const phases = useRows<{
+    id: string;
+    event_id: string;
+    name: string;
+    kind: string;
+  }>("tEventPhase");
+  const groups = useRows<{ id: string; phase_id: string; name: string }>(
+    "tEventGroup",
+  );
+  const brackets = useRows<{
+    id: string;
+    phase_id: string;
+    format: string;
+    is_archived: boolean;
+    graph: unknown;
+  }>("tBracket");
+  const teams = useRows<{ id: string; name: string }>("tTeam");
+  const memberships = useRows<{
+    event_id: string;
+    team_id: string;
+    fencer_id: string;
+  }>("tEventTeamFencer");
+  const [id, setId] = useState("");
+  const [matchId, setMatchId] = useState("");
+  const [search, setSearch] = useState("");
+  const [archived, setArchived] = useState(false);
+  const [scope, setScope] = useState("all");
+  const [snapshotId, setSnapshotId] = useState("");
+  const match = matches.data.find((m) => m.id === matchId);
+  const list = matches.data.filter(
+    (m) =>
+      (archived || (!m.is_archived && !m.is_void)) &&
+      (kind === "events"
+        ? m.event_id === id
+        : kind === "fencers"
+          ? m.left_fencer_id === id || m.right_fencer_id === id
+          : true) &&
+      (scope === "all" ||
+        (scope === "event" ? Boolean(m.event_id) : !m.event_id)) &&
+      `${m.current_left_name} ${m.current_right_name} ${m.id}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  const finalized = snapshots.data
+    .filter((s) => s.event_id === id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const snap = finalized.find((s) => s.id === snapshotId) ?? finalized[0];
+  const selectedPhases = phases.data.filter((p) => p.event_id === id);
+  return (
+    <>
+      <Intro
+        title={`${kind === "events" ? "Event" : kind === "fencers" ? "Fencer" : "Match"} History`}
+      >
+        Search shared results, inspect calls and corrections, and reveal
+        archived generations when needed.
+      </Intro>
+      <Notice
+        error={
+          events.error ||
+          fencers.error ||
+          matches.error ||
+          calls.error ||
+          audit.error ||
+          stats.error ||
+          scoring.error ||
+          snapshots.error ||
+          phases.error ||
+          groups.error ||
+          brackets.error ||
+          teams.error ||
+          memberships.error
+        }
+        loading={matches.loading}
+      />
+      <section className="card">
+        <ArchiveFilter checked={archived} onChange={setArchived} />
+        <Search value={search} onChange={setSearch} />
+        {kind === "events" && (
+          <EventPicker
+            events={events.data}
+            id={id}
+            onChange={(v) => {
+              setId(v);
+              setMatchId("");
+              setSnapshotId("");
+            }}
+            archived={archived}
+          />
+        )}
+        {kind === "fencers" && (
+          <label>
+            Fencer
+            <select
+              value={id}
+              onChange={(e) => {
+                setId(e.target.value);
+                setMatchId("");
+              }}
+            >
+              <option value="">Select registered fencer</option>
+              {fencers.data
+                .filter(
+                  (f) =>
+                    !f.is_unregistered &&
+                    (archived || !f.is_archived) &&
+                    f.display_name.toLowerCase().includes(search.toLowerCase()),
+                )
+                .map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.display_name} · {f.id.slice(0, 8)}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        {kind === "events" && id && (
+          <>
+            <h3>{events.data.find((e) => e.id === id)?.name}</h3>
+            <p>{events.data.find((e) => e.id === id)?.description}</p>
+            <h4>Phases, groups and bracket generations</h4>
+            {selectedPhases.map((p) => (
+              <section key={p.id}>
+                <h4>
+                  {p.name} · {p.kind}
+                </h4>
+                <p>
+                  {groups.data
+                    .filter((g) => g.phase_id === p.id)
+                    .map((g) => g.name)
+                    .join(", ")}
+                </p>
+                {brackets.data
+                  .filter(
+                    (b) => b.phase_id === p.id && (archived || !b.is_archived),
+                  )
+                  .map((b) => (
+                    <details key={b.id}>
+                      <summary>
+                        {b.format} · {b.id.slice(0, 8)}
+                        {b.is_archived ? " · Archived" : ""}
+                      </summary>
+                      <pre>{JSON.stringify(b.graph, null, 2)}</pre>
+                    </details>
+                  ))}
+              </section>
+            ))}
+            <h4>Event rosters</h4>
+            {memberships.data
+              .filter((m) => m.event_id === id)
+              .map((m) => (
+                <p key={`${m.team_id}:${m.fencer_id}`}>
+                  {teams.data.find((t) => t.id === m.team_id)?.name} ·{" "}
+                  {fencers.data.find((f) => f.id === m.fencer_id)?.display_name}
+                </p>
+              ))}
+            {snap && (
+              <>
+                <h4>Frozen final standings</h4>
+                {Object.entries(snap.group_standings ?? {}).map(([id, g]) => (
+                  <section key={id}>
+                    <h4>{g.name}</h4>
+                    <StandingsTable
+                      data={g.standings.map((s) => ({
+                        ...s,
+                        display_name:
+                          fencers.data.find((f) => f.id === s.id)
+                            ?.display_name ?? s.display_name,
+                      }))}
+                    />
+                  </section>
+                ))}
+                <label>
+                  Finalization
+                  <select
+                    value={snap.id}
+                    onChange={(e) => setSnapshotId(e.target.value)}
+                  >
+                    {finalized.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {new Date(s.created_at).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <StandingsTable
+                  data={snap.standings.map((s) => ({
+                    ...s,
+                    display_name:
+                      fencers.data.find((f) => f.id === s.id)?.display_name ??
+                      s.display_name,
+                  }))}
+                />
+                <details>
+                  <summary>Ranking configuration at finalization</summary>
+                  <pre>{JSON.stringify(snap.configuration, null, 2)}</pre>
+                </details>
+              </>
+            )}
+          </>
+        )}
+        {kind === "fencers" && id && (
+          <>
+            <h3>Performance</h3>
+            <h4>Scoring breakdown</h4>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Scope</th>
+                    <th>Call type</th>
+                    <th>Value</th>
+                    <th>Calls</th>
+                    <th>Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scoring.data
+                    .filter((s) => s.fencer_id === id)
+                    .map((s) => (
+                      <tr key={`${s.scope}:${s.call_type}:${s.points}`}>
+                        <td>{s.scope}</td>
+                        <td>{s.call_type}</td>
+                        <td>{s.points}</td>
+                        <td>{s.calls}</td>
+                        <td>{s.total_points}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Scope</th>
+                    <th>Matches</th>
+                    <th>Wins</th>
+                    <th>Losses</th>
+                    <th>Draws</th>
+                    <th>Points for / against</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {["overall", "event", "standalone"].map((scope) => {
+                    const selected = stats.data.filter(
+                      (s) =>
+                        s.fencer_id === id &&
+                        (scope === "overall" || s.scope === scope),
+                    );
+                    return (
+                      <tr key={scope}>
+                        <td>{scope}</td>
+                        {(["matches", "wins", "losses", "draws"] as const).map(
+                          (k) => (
+                            <td key={k}>
+                              {selected.reduce((v, s) => v + Number(s[k]), 0)}
+                            </td>
+                          ),
+                        )}
+                        <td>
+                          {selected.reduce(
+                            (v, s) => v + Number(s.points_for),
+                            0,
+                          )}{" "}
+                          /{" "}
+                          {selected.reduce(
+                            (v, s) => v + Number(s.points_against),
+                            0,
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        <label>
+          Match scope
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="all">All</option>
+            <option value="event">Event</option>
+            <option value="standalone">Standalone</option>
+          </select>
+        </label>
+        <div className="selection-list">
+          {list.map((m) => (
+            <button
+              className="list-item"
+              key={m.id}
+              onClick={() => setMatchId(m.id)}
+            >
+              <strong>
+                {m.current_left_name} {m.left_score}–{m.right_score}{" "}
+                {m.current_right_name}
+              </strong>
+              <small>
+                {new Date(m.created_at).toLocaleString()} · {m.outcome}
+                {m.is_archived
+                  ? " · Archived"
+                  : m.is_void
+                    ? " · Void"
+                    : ""} · {m.id.slice(0, 8)}
+              </small>
+            </button>
+          ))}
+        </div>
+      </section>
+      {match && (
+        <section className="card">
+          <h3>
+            {match.current_left_name} vs {match.current_right_name}
+          </h3>
+          <p>
+            {match.left_score}–{match.right_score} · {match.outcome} · Referee{" "}
+            {match.referee_id ?? "Not recorded"}
+          </p>
+          <div className="button-row">
+            <button
+              className="primary"
+              disabled={match.is_archived || match.is_void}
+              onClick={() => {
+                sessionStorage.setItem("openMatch", match.id);
+                window.location.hash = "/single-match";
+              }}
+            >
+              Open / correct match
+            </button>
+            <button
+              className="subtle"
+              onClick={() =>
+                downloadJson(`match-${match.id}.json`, {
+                  match,
+                  calls: calls.data.filter((c) => c.match_id === match.id),
+                  audit: audit.data.filter(
+                    (a) =>
+                      a.record_id === match.id ||
+                      calls.data.some(
+                        (c) => c.id === a.record_id && c.match_id === match.id,
+                      ),
+                  ),
+                })
+              }
+            >
+              Export full report
+            </button>
+          </div>
+          <h4>Scoring timeline</h4>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>UTC</th>
+                  <th>Side / call</th>
+                  <th>Points</th>
+                  <th>Clock</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calls.data
+                  .filter((c) => c.match_id === match.id)
+                  .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
+                  .map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.recorded_at}</td>
+                      <td>
+                        {c.side} · {c.call_type}
+                      </td>
+                      <td>{c.points}</td>
+                      <td>{(c.match_time_ms / 1000).toFixed(1)}s</td>
+                      <td>{c.is_reversed ? "Reversed" : "Counted"}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <h4>Applied settings & provenance</h4>
+          <pre>{JSON.stringify(match, null, 2)}</pre>
+          <h4>Correction audit</h4>
+          {audit.data
+            .filter(
+              (a) =>
+                a.record_id === match.id ||
+                calls.data.some(
+                  (c) => c.id === a.record_id && c.match_id === match.id,
+                ),
+            )
+            .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
+            .map((a) => (
+              <details key={a.id}>
+                <summary>
+                  {a.recorded_at} · {a.action} · {a.actor_id ?? "System"}
+                </summary>
+                <pre>
+                  {JSON.stringify(
+                    { before: a.old_value, after: a.new_value },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            ))}
+        </section>
+      )}
+    </>
+  );
+}
