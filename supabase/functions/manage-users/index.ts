@@ -79,10 +79,23 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({ password }),
       });
-      if (!updated.ok)
+      if (!updated.ok) {
+        const failure = await updated.json().catch(() => null);
+        // Use known codes rather than exposing arbitrary upstream response text.
+        const errors: Record<string, string> = {
+          same_password: "Choose a password different from your current password.",
+          weak_password: "Choose a stronger password of 12–128 characters.",
+          reauthentication_needed: "Sign in again before changing your password.",
+          reauthentication_not_valid: "Your verification has expired. Sign in again and retry.",
+          over_request_rate_limit: "Too many attempts. Wait a moment and try again.",
+        };
         throw new Error(
-          "Password update failed. Request a fresh recovery link and try again.",
+          errors[failure?.code ?? failure?.error_code] ??
+            (updated.status === 401 || updated.status === 403
+              ? "Your session has expired. Request a fresh recovery link and try again."
+              : "Password update failed. Please try again shortly."),
         );
+      }
       const { error } = await service
         .from("tUser")
         .update({ must_change_password: false })

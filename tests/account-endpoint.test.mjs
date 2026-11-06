@@ -16,7 +16,7 @@ async function request(
   {
     role = "management", active = true, reserveError = null,
     signedIn = true, revoked = false, mustChangePassword = false,
-    mailError = null, passwordAccepted = true,
+    mailError = null, passwordAccepted = true, passwordErrorCode = null, passwordStatus = 422,
   } = {},
 ) {
   let handler;
@@ -82,7 +82,8 @@ async function request(
       assert.equal(url, "test-runtime/auth/v1/user");
       assert.equal(options.headers.Authorization, "Bearer test");
       record("self-password", JSON.parse(options.body));
-      return { ok: passwordAccepted };
+      return { ok: passwordAccepted, status: passwordAccepted ? 200 : passwordStatus,
+        json: async () => ({ code: passwordErrorCode, msg: "untrusted upstream message" }) };
     },
   );
   const res = await handler(
@@ -164,6 +165,19 @@ const failedPassword = await request(
 );
 assert.equal(failedPassword.status, 400);
 assert.ok(!failedPassword.events.some(e => e.name === "update:tUser"), "rejected password must not clear first-password gate");
+for (const [code, status, expected] of [
+  ["same_password", 422, /different from your current password/],
+  ["weak_password", 422, /stronger password/],
+  ["unknown_error", 401, /session has expired/],
+  ["unknown_error", 500, /try again shortly/],
+]) {
+  const result = await request({ action: "password", password: "a-new-self-password" },
+    { passwordAccepted: false, passwordErrorCode: code, passwordStatus: status });
+  assert.equal(result.status, 400);
+  assert.match(result.body.error, expected);
+  assert.ok(!result.body.error.includes("untrusted upstream message"));
+  assert.ok(!result.events.some(e => e.name === "update:tUser"));
+}
 const firstPassword = await request(
   { action: "password", password: "a-new-self-password" },
   { mustChangePassword: true },
