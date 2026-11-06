@@ -369,3 +369,11 @@ Intentionally deferred features (not initial Traditional-workflow blockers):
 ## 12. Change discipline
 
 When a decision or implementation changes: revise the relevant page, update this status/decision register, preserve the relevant rationale and PR or migration reference, sync the shared Google Doc and repository copy, and record unverified downstream workflows. Keep deprecated pre-migration audit notes in version history and separate historic references, not as false current blockers. No infrastructure changes, schema migrations or code deployment are authorized merely by editing this specification.
+
+## 13. Selective testing and release verification (2026-11-06)
+
+Decision: Scorekeeper uses risk-based selective testing instead of requiring all automated suites after every edit. T0 smoke (build, match commands, tournament) runs for ordinary code changes; T1 adds changed feature scopes and their dependencies; T2 runs all six non-browser suites; T3 includes the full browser regression; T4 separately verifies the deployed client, Supabase schema and trusted functions. Scope or individual-suite overrides remain available to the developer.
+
+Criticality is not frequency: match scoring, card/penalty attribution, referee control, authentication, row-level permissions, audit history, bracket advancement and finalization carry critical impact, but unrelated cosmetic edits need not trigger every critical test. Schema/RLS, scoring ledger, authentication/session, audit/finalization and major release changes must receive full regression plus appropriate hosted acceptance. Docs-only changes may skip automated tests.
+
+Authoritative executable test mapping and run commands: [docs/TESTING.md](TESTING.md), [scripts/test-select.mjs](../scripts/test-select.mjs) and [GitHub Actions selective test workflow](../.github/workflows/scorekeeper-tests.yml). `npm test` remains the backward-compatible six-suite non-browser command. A green local test does not verify a hosted migration, function deployment or live environment. The test-selector implementation is prepared on branch `chore/selective-test-profiles`; it is not assumed merged or deployed until separately verified.
