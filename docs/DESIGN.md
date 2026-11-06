@@ -1,7 +1,7 @@
 # Lightspeed Scorekeeper — Design Specification
 
 Version: 2026-11-06, consolidated following merged PR #1, #2 and #3
-Status: Approved product requirements, deployed implementation, pending live acceptance, and approved management-page redesign awaiting implementation
+Status: Approved product requirements, deployed implementation, pending live acceptance, and approved management-page plus Match Prep/Live Match redesigns awaiting implementation
 Scope: Lightspeed Saber Academy — Traditional fencing scorekeeper and event administration
 
 ## 1. Authority, references and implementation status
@@ -95,18 +95,47 @@ Implementation: Shared Traditional presets, archival and match-level settings sn
 
 ## 6. Page 4 — Run Single Match
 
-- The initial live scoring mode is Traditional. Each side selects a registered fencer or enters an unregistered name. Event matches, by contrast, require registered competitors.
-- Traditional calls are Indirect, Clean Hit and Counter; each call may award 1, 3 or 5 points. Preserve both call category counts and point totals in report/history.
-- Default clock is three minutes unless overridden by a preset/match setting; optional target score ends the active clock when reached. The time or target completion should visibly change the screen, leaving results and correction controls visible until Match Report is chosen.
-- The referee must pause before making a scoring call. Scoring/corrections are not permitted while the clock is running.
-- Save each call with attribution, sequence and clock/UTC timing. Allow undo/reversal or correction when paused or ended. Audited completed-match correction must record actor, time and changed values.
-- A scored match uses transactional server persistence with revision/duplicate-write protection and periodic or transition checkpoints rather than a write for every timer tick. Refresh must pause, not auto-resume. Preserve/recover user-scoped unsaved snapshots and handle network retry without duplicate calls.
-- Only one referee may claim a given match at a time. The server-backed 90-second claim is checkpoint-renewed; after expiry another controller must explicitly recover/take over. Different bouts may proceed on different devices simultaneously.
-- Equal scores at natural time expiry may produce a tie in standalone/group play; an elimination match cannot advance tied and must be resolved by the referee's tiebreak decision.
-- Current conservative implementation: a manually ended match produces no result, EVEN WHEN one side leads. Whether to award a non-tied manually ended match is still an open product decision; no result means no credited win/loss.
-- A match report includes competitors, setting snapshots, individual scored calls and category breakdown, final/partial result, referee attribution and subsequent correction history. Keep CSV/printable export behavior where supported.
+STATUS: APPROVED MATCH-SCREEN REDESIGN, implementation pending (2026-11-06). The existing deployed Scorekeeper combines match setup, live controls, a 3×3 category/point grid and a call-history section on one page. That layout is superseded by the two-stage flow below. Existing transactional saving, referee leasing and match history remain required. Do not describe this UI redesign as already shipped.
 
-Implementation: Traditional scoring, transactional saving, exclusive referee control, recovery and reports are coded and deployed. Verify live timing, pause/call/report flow, offline recovery and concurrent-device safety.
+### 6A. Match Prep — distinct preparation screen
+
+- Selecting "Run Single Match" opens a dedicated Match Prep screen FIRST, not the live scoreboard. Gather both fencers (registered selection or typed Unregistered name), match preset, match duration/length and Score to Win (target score, optional/no-target allowed). A round/bout label may be retained here if needed; match UI should not display setup forms in the live view.
+- Choosing a preset populates duration and Score to Win. Referee may override those values for this specific match; overrides do not mutate the shared preset. Preserve preset ID and the effective settings snapshot. Remember last-used preset per logged-in user on that device.
+- Confirming prep commits/initializes the match configuration and navigates to Live Match; do NOT automatically start the timer. Keep a safe Cancel/Back path before the bout starts, without abandoning already played matches.
+- DESIGN FOR LATER COLOR SUPPORT: fencers and teams may have assigned display colors. The prep screen will ultimately show the two resolved side colors and allow match-specific overrides without editing the fencer/team defaults. Preserve a match-side color snapshot/identity so historical logs and reports retain their original coloring. This is planned extension, not a claim that profile/team color fields currently exist.
+- Event-linked Traditional bouts should eventually reuse the same Live Match component with event-selected, registered fencers and phase/preset context; event competitors must not switch to generic Unregistered. Do not silently implement Control Point/team scoring using these Traditional rules.
+
+### 6B. Live Match — distraction-free scoreboard
+
+- After confirmation, present a responsive full-viewport, scoreboard-focused screen (minimal or hidden normal app navigation/chrome): prominent LEFT and RIGHT fencer names; very large scores; large center countdown timer. Other than the timer, visible scoring controls and a Manage button, avoid setup fields, reports, large tables, toolbars and unrelated status panels on this screen. Keep usable on phone, tablet and desktop, including orientation changes.
+- Each fencer has exactly THREE visible quick-scoring buttons: +1, +3 and +5, NOT the current 3×3 category/point grid. The mapping is FIXED and unambiguous: +1 = Indirect; +3 = Clean Hit; +5 = Counter. A click writes one correctly typed call; the detailed category still exists in stored calls and match reports. Clearly associate buttons with the correct side.
+- Tap/click the countdown time itself to START or PAUSE the clock (including initial start and later resume). The clock must be an accessible, large interactive control with obvious running/paused visual state and keyboard affordances. On initial entry, time displays the configured duration and remains stopped.
+- Preserve the already approved referee rule: pause first, then award points. Quick-score buttons are usable only while paused; while the clock runs, they must not record points. Do not silently auto-award or auto-pause when points are clicked.
+- Time expiry or reaching Score to Win ends running countdown, visibly identifies match-complete status and keeps score/corrections available through the deliberate completion/report workflow. The live view remains on the scoreboard until the referee elects to view Match Report; do not unexpectedly navigate away.
+- While a match is underway, match settings and participants are fixed except for explicit authorized timer adjustments, scoring reversal and audited result correction through Manage. Once a match has been finalized, restrict modifications to the established audited correction path.
+
+### 6C. Manage — live match control panel
+
+- The Live Match has a prominent but visually secondary "Manage" button. It opens a dedicated management overlay/panel (rather than always showing the log on the live scoreboard). Recommended safe default for implementation: opening Manage while the timer is running pauses the clock; do not silently resume on close.
+- TIMER ADJUSTMENT: Provide clear up/down arrows for minutes AND seconds of remaining time (suggested controls: minute +/-1 and second +/-1 with normalized MM:SS display). Adjust actual remaining time, not the originally configured match duration; do not allow negative remaining time. Adjustments are authorized only while the clock is paused, must persist, and should produce an audit entry with actor, timestamp and before/after remaining time. Confirm specific bounds/behavior at zero if implementation exposes it.
+- SCORE LOG: Show EVERY recorded hit/call in chronological order, including reversed ones, not just the currently scoring calls. Each log row uses the exact conceptual format "<Fencer> +<points> → <Left Score> to <Right Score>" (for example "Ari +3 → 8 to 5"), alongside call time/category where useful. The displayed left/right values are the scores immediately AFTER that original call, preserved as its historical post-call snapshot; never rewrite that snapshot because a subsequent call was reversed. Current scoreboard totals, however, reflect only non-reversed calls.
+- COLORS: Each log entry is visually associated with the fencer/team side that scored, using that side's resolved color and any per-match override when color support is added. Store the call's side/identity and a match-side color snapshot to ensure future historical accuracy. Include name/side markers so color is never the only signal; reversed entries remain distinguishable and readable.
+- REVERT: Every active score-log entry has a Revert action. Require an explicit confirmation identifying the fencer and +1/+3/+5 call. Reverting MUST NOT delete the row: flag the original call as reversed/overridden, record who performed the reversal (authenticated UUID) and when, keep the original point value/type/time/post-call totals, and gray/mute the row with "Reverted" attribution. A reversed row must not be reversible again through the ordinary action. The scoreboard recalculates from non-reversed calls. Do not erase audit history on repeated saves, refreshes or history export.
+- MATCH COMPLETE: Provide a "Match Complete" button within Manage. Require an explicit confirmation before ending/finalizing the bout. Record completion state and preserve the score/call log; clearly show completion on Live Match and provide the established deliberate Match Report step. Do not silently abandon or delete unfinished calls. Whether manually completing a NON-tied match awards its leading fencer a win is STILL AN OPEN PRODUCT DECISION; current backend conservatively records manual stops as no result, so do not silently change that outcome.
+- Keep safe/save/retry/offline and expired-claim recovery controls available in an appropriate management/error surface without cluttering the central live scoreboard.
+
+### 6D. Data contract and migration impact (design only; NO migration applied)
+
+- EXISTING fields satisfy the requested match settings: public."tTraditionalMatch".target_score = ScoreToWin, duration_ms = MatchDurationMinutes stored as milliseconds, remaining_ms = TimeRemaining stored as milliseconds. Likewise, tMatchPreset already contains duration_ms and target_score. Preserve configured duration separately from current remaining time and save an authoritative pause/checkpoint value; avoid duplicative columns named exactly ScoreToWin, MatchDurationMinutes or TimeRemaining.
+- EXISTING public."tTraditionalCall" contains id, match_id, side, call_type, points, match_time_ms, recorded_at and is_reversed. Existing tAudit triggers log match and call changes with actor/time/old/new data. However, current frontend removes reverted calls from its local array and the save_match RPC treats missing calls as reversed; the new UI/persistence flow must retain and reconstruct BOTH active and reversed rows without accidentally reactivating or discarding them.
+- Before implementation, decide whether to add explicit tTraditionalCall.reversed_by, reversed_at and immutable left_score_after/right_score_after columns (recommended for direct log rendering), or reliably expose the same information through append-only audit/events. Current table lacks direct reversed-by/time and per-call post-score columns. Identify the user who REVERTED, not only who originally scored.
+- The fixed +1/+3/+5 mapping must be enforced in authoritative save/validation logic for NEW Traditional calls as well as the UI, without corrupting any legacy recorded calls. The current call model allows type/point combinations independently.
+- Anticipated future color persistence: default fencer/team colors (source model not yet chosen) and a per-match left/right color snapshot or safe equivalent; do not design the log to derive historical colors only from mutable current profile/team settings.
+- Timer edits should be durable across checkpoint/reconnect and auditable; do not rewrite initial duration or manipulate every timer display tick as a DB write. Match ID, preset/settings, fencer identity, call chronology, all reversed calls, referee claims and original historical records remain intact.
+- The Match Prep → Live Match navigation is a screen/UI state and does not itself require a new table or a separate match schema. The existing "ready/running/paused/ended" states may be extended as needed while preserving legacy records and tournament integration.
+- Implementation requires UI reorganization plus a deliberate persistence/API audit for reversible calls and snapshots. DB migrations may be needed for reversal attribution, per-call post-score snapshots and later color defaults/overrides; obtain explicit migration authorization separately.
+
+Implementation acceptance: Starting a single match first displays Prep; confirming displays stopped full-screen Live Match; timer tap toggles running/paused; while paused +1/+3/+5 creates correct call types on the right side; Manage edits time, shows score-after-call log with colors where supported, and confirms durable audit-safe reversals and manual completion; all remains consistent through refresh, multi-device conflicts, finalization and Match History.
 
 ## 7. Page 5 — Manage Events and Teams
 
@@ -139,7 +168,7 @@ Implementation: Individual Traditional round robin, manually selected bracket ad
 ## 9. Page 7 — View History
 
 - Event History: full event metadata, groups/phases/participants, event rosters, match links, brackets including archived prior generations, group standings and finalized snapshot versions.
-- Match History: detailed report of settings/preset snapshot, participants, score/call chronology, timestamps, referee attribution and any corrections/void/archive history. Include standalone and event-linked matches.
+- Match History: detailed report of settings/preset snapshot, participants, score/call chronology including reversed-but-retained entries, original post-call left/right score snapshots, reversal actor/time, timer edits, timestamps, referee attribution and any corrections/void/archive history. Include standalone and event-linked matches. Include side/competitor color snapshots when implemented.
 - Fencer History: overall performance with separate event and standalone summaries; current profile name by UUID, original name snapshot for provenance. Exclude generic Unregistered from personal aggregates.
 - Archived and voided records are hidden from normal active queries by default, available through an explicit toggle/filter with recognizable status.
 - Immutable audit records should show actor UUID, UTC timestamp and old/new values where applicable. Archive or regenerate without destroying evidence of prior completed bouts.
@@ -159,6 +188,11 @@ Implementation: Shared keyboard mappings, secondary ranking configuration, team 
 
 ## 11. Outstanding work: active verification vs product decisions vs deferrals
 
+Approved Match Prep / Live Match redesign awaiting implementation (not deployed, not a deferred feature):
+- Implement §6A–6D: standalone Match Prep before any live bout, full-viewport minimal Live Match, tap-to-toggle clock, fixed +1 Indirect/+3 Clean/+5 Counter per side, Manage time-adjust arrows, durable color-aware chronological score log with confirmed reversible/attributed entries, confirmed Match Complete, and integration with existing report/recovery workflows. Current production still uses combined setup/live UI and a 3×3 grid.
+- Existing DB match duration/target/remaining columns suffice. Investigate additive reversal metadata and immutable historical post-call score snapshots plus later side-color snapshots; NO schema migration, code deployment or DB mutation is authorized by this document update.
+- Test paused-only scoring, timer corrections, overwrite/reversal persistence, refreshed playback, finalization and multi-device referee leases after implementation.
+
 Approved management-page UX work awaiting implementation (not deployed and not intentionally deferred):
 - Apply §2A to Users, Fencers, Teams, Match Presets and other record-management pages: searchable/sortable/filterable lookup tables; notes accessible on hover/focus/touch; row navigation actions; separate labeled Create/Edit forms and dedicated Archive/deactivation confirmation screens. Existing mixed lookup/editor screens still need refactoring. No schema migration or deployment is authorized by recording this design.
 
@@ -171,8 +205,10 @@ Active verification/operational follow-up (not new design scope):
 6. Check fencer/preset archive, team logo upload, global keyboard mapping and configuration/history audits on mobile and desktop.
 
 Open product decisions (do NOT resolve by assumption):
-A. Non-tied manual stop: incomplete/no result versus award to the leading fencer. Current deployed rule is incomplete/no result for every manual stop.
+A. Manual "Match Complete" with non-tied score: incomplete/no result versus award to the leading fencer. The currently deployed server treats manual stops as no result; this decision is necessary before changing outcome semantics. Equal-score manual endings remain no result until separately defined.
 B. Final global secondary tiebreak order: point differential versus total points. Wins remain first. Head-to-head is postponed.
+C. Final timer-edit bounds and zero-time behavior, and whether Manage auto-pauses an active clock (safe UI default proposed in §6C). These are implementation details not yet explicitly confirmed.
+D. Color defaults/ownership for fencer vs team and default values before optional per-match overrides are introduced; preserve historical snapshots even if coloring is delivered in a later phase.
 
 Intentionally deferred features (not initial Traditional-workflow blockers):
 - Control Point match scoring and team fixtures.
