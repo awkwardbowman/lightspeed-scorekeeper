@@ -12,12 +12,12 @@ Canonical scope and acceptance criteria: [DESIGN.md §14](DESIGN.md) and [shared
 5. Live headline more prominent than names and timer; score buttons bottom corners and Manage aligned bottom center with save status beneath. Manage directly enters existing Admin Mode while retaining critical actions.
 6. Breadcrumb separators at every depth. Readable Match History listing, winner-aware bolding, table/filter cleanup. Fencer History redesign deferred.
 
-## Mandatory dependency
-The current preset schema does not own Match Type. Design/update preset storage and existing-record fallback before treating preset Match Type as implemented. Existing referee claim, cards, ledger, stats, knockout, audit, and hosted migration protections must not regress. Use selective tests for UI edits; any preset schema/backend change requires full regression and hosted acceptance.
+## Approved preset model change and save guarantees
+Approved: add match_type (Standard/Knockout) to tMatchPreset, separate from scoring mode; update preset Create/Edit and database/API constraints with legacy fallback (Standard for standalone suggested), preserve authoritative event bracket type and effective match snapshots. Existing referee claim, cards, ledger, stats, knockout, audit, and hosted migration protections must not regress. Use selective tests for UI edits; any preset schema/backend change requires full regression and hosted acceptance.
 
 ## Deliberately separate later scope
-- Dashboard “Sync Local Files”: own-browser-origin stored recovery, remote revision/receipt reconciliation, safe conflict handling and verified cleanup. Never blindly overwrite the DB from device clock timestamps.
-- Full Admin Mode workflow/placement review beyond removing the redundant Manage menu.
+- No “Sync Local Files” feature (explicitly rejected). Use the shared Supabase database as authoritative; retain only normal acknowledgement, fail-and-retry/idempotency protections and existing minimal lost-response recovery. Match Prep recovery field is removed; no offline-first mode.
+- Full Admin Mode workflow/placement review beyond removing the redundant Manage menu (next design discussion).
 - Fencer History redesign and larger individual event-detail/navigation restructuring if required.
 - Deferred team/Control Point scoring.
 
