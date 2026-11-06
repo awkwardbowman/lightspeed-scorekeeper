@@ -6,7 +6,7 @@ Referee-operated Traditional lightsaber fencing, with shared Management records,
 
 Use Node.js LTS, run `npm ci`, and copy `.env.example` to `.env.local`. Supply the project's public URL and publishable key; never put a Supabase service-role key in a `VITE_` variable. Then run `npm run dev`.
 
-Authentication is mandatory, including standalone matches. Accounts are provisioned by the Admin. The initial Admin may use an existing authenticated session to set their password under My account. No public signup or email recovery UI is provided.
+Authentication is mandatory, including standalone matches. Active managers and Admin invite new Management accounts by email. Invitees set their own passwords; Forgot password sends a recovery link. Admin can pause invitations without blocking existing login or recovery. Public signup remains disabled. Custom SMTP must be configured before the email readiness gate is enabled.
 
 ## Validate
 

@@ -26,6 +26,13 @@ export default function Auth({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
+  const [setupPassword, setSetupPassword] = useState(() =>
+    ["invite", "recovery"].includes(
+      new URLSearchParams(window.location.search).get("auth") ?? "",
+    ),
+  );
+  const [recovery, setRecovery] = useState(false);
+  const [notice, setNotice] = useState("");
   async function refresh() {
     const current = ++request.current;
     if (!supabase) {
@@ -50,7 +57,8 @@ export default function Auth({ children }: { children: ReactNode }) {
   }
   useEffect(() => {
     void refresh();
-    const subscription = supabase?.auth.onAuthStateChange(() => {
+    const subscription = supabase?.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setSetupPassword(true);
       setTimeout(() => void refresh(), 0);
     }).data.subscription;
     const interval = setInterval(() => void refresh(), 15000);
@@ -84,12 +92,20 @@ export default function Auth({ children }: { children: ReactNode }) {
       </main>
     );
   if (profile?.is_active && !profile.is_deleted) {
-    if (profile.must_change_password)
+    if (profile.must_change_password || setupPassword)
       return (
         <main className="shell">
           <section className="card">
-            <h1>Change your temporary password</h1>
-            <PasswordForm onDone={refresh} />
+            <h1>Set your password</h1>
+            <PasswordForm
+              onDone={async () => {
+                const u = new URL(window.location.href);
+                u.searchParams.delete("auth");
+                window.history.replaceState(null, "", u.toString());
+                setSetupPassword(false);
+                await refresh();
+              }}
+            />
             <button className="subtle" onClick={() => void db().auth.signOut()}>
               Sign out
             </button>
@@ -116,7 +132,36 @@ export default function Auth({ children }: { children: ReactNode }) {
         {!supabase ? (
           <p role="alert">Authentication is not configured.</p>
         ) : (
-          <form className="editor" onSubmit={login}>
+          <form
+            className="editor"
+            onSubmit={
+              recovery
+                ? async (e) => {
+                    e.preventDefault();
+                    setBusy(true);
+                    setError("");
+                    setNotice("");
+                    try {
+                      const { error } = await db().auth.resetPasswordForEmail(
+                        email.trim(),
+                        {
+                          redirectTo:
+                            "https://lightspeed-scorekeeper.vercel.app/?auth=recovery",
+                        },
+                      );
+                      if (error) throw error;
+                      setNotice(
+                        "If this email has an account, a password reset link will arrive shortly.",
+                      );
+                    } catch (e) {
+                      setError(message(e));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }
+                : login
+            }
+          >
             <label>
               Email
               <input
@@ -127,24 +172,42 @@ export default function Auth({ children }: { children: ReactNode }) {
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
-            <label>
-              Password
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
+            {!recovery && (
+              <label>
+                Password
+                <input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+            )}
             <button className="primary" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
+              {busy
+                ? "Working…"
+                : recovery
+                  ? "Send password reset link"
+                  : "Sign in"}
             </button>
           </form>
         )}
+        <button
+          className="subtle"
+          onClick={() => {
+            setRecovery(!recovery);
+            setError("");
+            setNotice("");
+          }}
+        >
+          {recovery ? "Back to sign in" : "Forgot password?"}
+        </button>
+        {notice && <p role="status">{notice}</p>}
         {error && <p role="alert">{error}</p>}
         <p className="muted">
-          Accounts and password resets are managed by your administrator.
+          New accounts are invited by existing managers. Only you can reset your
+          password.
         </p>
       </section>
     </main>

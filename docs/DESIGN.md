@@ -1,5 +1,19 @@
 ﻿# Lightspeed Scorekeeper — Design Specification
 
+## Access policy revision — November 6, 2026
+
+This section supersedes earlier account-creation, password-reset and no-email decisions below.
+
+- Any active authorized Management user or Admin may invite a new Management account by entering an email address. The invite should deliver an account-access link; no manager chooses or receives the invitee's password.
+- Every user may reset/change only their own password. Remove Admin reset-other-user controls and server actions. No other-user password may be set through app endpoints.
+- Only Admin may temporarily pause or resume creation of new accounts. Enforce this on the server, independently of ordinary shared Configuration permissions. Pausing invitations must not block existing sign-in or self-service recovery.
+- Keep public self-registration disabled. App managers do not need Supabase organization/dashboard membership. New accounts always receive Management, never Admin.
+- Email was acceptable on the assumption that Supabase could deliver invitations without substantial additional setup. Verified Supabase documentation says its default SMTP sends only to organization-team addresses. Ordinary app-user invites require custom SMTP/email delivery; do not add app users to the Supabase organization as a workaround.
+- User authorized free-tier Brevo SMTP setup. Replacement invitation, self-service recovery and Admin pause controls are prepared and locally tested. Production activation is gated on provider signup, sender verification, SMTP configuration and delivery verification.
+
+Source: https://supabase.com/docs/guides/auth/auth-smtp (verified November 6, 2026).
+
+
 
 **Status:** Consolidated product requirements, last revised 2026-11-06. This file is the local editable source; a Google Drive copy is published for other agents. Agreed requirements override the historic MVP outline below. No code or database changes are implied by writing this file.
 

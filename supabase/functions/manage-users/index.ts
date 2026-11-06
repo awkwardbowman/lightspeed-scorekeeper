@@ -55,41 +55,34 @@ Deno.serve(async (req: Request) => {
       before: unknown,
       after: unknown,
     ) => {
-      const { error } = await service
-        .from("tAudit")
-        .insert({
-          table_name: "tUser",
-          record_id: recordId,
-          action: type,
-          actor_id: identity.user!.id,
-          old_value: before,
-          new_value: after,
-        });
+      const { error } = await service.from("tAudit").insert({
+        table_name: "tUser",
+        record_id: recordId,
+        action: type,
+        actor_id: identity.user!.id,
+        old_value: before,
+        new_value: after,
+      });
       check(error);
     };
     if (action === "password") {
       passwordValid();
-      // Never allow the same temporary password to satisfy the required change.
-      const verify = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        auth: { persistSession: false },
+      if (body.id && body.id !== identity.user.id)
+        return reply({ error: "You can only change your own password" }, 403);
+      // Forward only the verified caller token; never use the service credential for passwords.
+      const updated = await fetch(`${url}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          Authorization: auth,
+          apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password }),
       });
-      const same = await verify.auth.signInWithPassword({
-        email: identity.user.email!,
-        password,
-      });
-      if (same.error && same.error.code !== "invalid_credentials")
-        throw same.error;
-      if (!same.error) {
-        await verify.auth.signOut({ scope: "local" });
+      if (!updated.ok)
         throw new Error(
-          "Choose a different password from the temporary password.",
+          "Password update failed. Request a fresh recovery link and try again.",
         );
-      }
-      const updated = await service.auth.admin.updateUserById(
-        identity.user.id,
-        { password },
-      );
-      check(updated.error);
       const { error } = await service
         .from("tUser")
         .update({ must_change_password: false })
@@ -104,7 +97,7 @@ Deno.serve(async (req: Request) => {
       return reply({ ok: true });
     }
     if (profile.must_change_password)
-      return reply({ error: "Change your temporary password first" }, 403);
+      return reply({ error: "Set your password first" }, 403);
     if (action === "profile") {
       if (!name || name.length > 120)
         throw new Error("A display name is required (120 characters maximum).");
@@ -121,6 +114,77 @@ Deno.serve(async (req: Request) => {
       );
       return reply({ ok: true });
     }
+    if (action === "reset" || action === "create")
+      return reply(
+        { error: "Use email invitations and self-service password recovery" },
+        403,
+      );
+    if (action === "invite") {
+      if (name.length > 120)
+        throw new Error("Display name must be at most 120 characters.");
+      const email =
+        typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+      const { data: reservation, error: reserveError } = await caller.rpc(
+        "reserve_invitation",
+        { p_email: email },
+      );
+      check(reserveError);
+      const { data, error } = await service.auth.admin.inviteUserByEmail(
+        email,
+        {
+          redirectTo: "https://lightspeed-scorekeeper.vercel.app/?auth=invite",
+        },
+      );
+      if (error) {
+        check(
+          (
+            await service
+              .from("tInvitation")
+              .update({
+                status: "failed",
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", reservation)
+          ).error,
+        );
+        throw error;
+      }
+      // The emailed link is the recipient's credential; it never reaches the inviter.
+      const provision = await service
+        .from("tUser")
+        .insert({
+          id: data.user!.id,
+          email,
+          display_name: name || email.split("@")[0].slice(0, 120),
+          app_role: "management",
+          is_active: true,
+          must_change_password: true,
+          created_by: identity.user.id,
+        });
+      if (provision.error) {
+        await service.auth.admin.updateUserById(data.user!.id, {
+          ban_duration: "876000h",
+        });
+        await service
+          .from("tInvitation")
+          .update({ status: "failed" })
+          .eq("id", reservation);
+        throw provision.error;
+      }
+      check(
+        (
+          await service
+            .from("tInvitation")
+            .update({ status: "sent", updated_at: new Date().toISOString() })
+            .eq("id", reservation)
+        ).error,
+      );
+      await audit(data.user!.id, "account_invited", null, {
+        email,
+        invited_by: identity.user.id,
+      });
+      return reply({ ok: true });
+    }
     if (profile.app_role !== "admin")
       return reply({ error: "Admin access required" }, 403);
     if (action === "list") {
@@ -130,40 +194,6 @@ Deno.serve(async (req: Request) => {
         .order("created_at");
       check(error);
       return reply({ users: data });
-    }
-    if (action === "create") {
-      passwordValid();
-      if (!name || name.length > 120 || typeof body.email !== "string")
-        throw new Error("Email and display name are required.");
-      const { data, error } = await service.auth.admin.createUser({
-        email: body.email.trim(),
-        password,
-        email_confirm: true,
-      });
-      check(error);
-      const result = await service
-        .from("tUser")
-        .upsert({
-          id: data.user!.id,
-          email: body.email.trim(),
-          display_name: name,
-          app_role: "management",
-          is_active: true,
-          must_change_password: true,
-          created_by: identity.user.id,
-        });
-      if (result.error) {
-        await service.auth.admin.updateUserById(data.user!.id, {
-          ban_duration: "876000h",
-        });
-        throw result.error;
-      }
-      await audit(data.user!.id, "account_created", null, {
-        email: body.email.trim(),
-        display_name: name,
-        must_change_password: true,
-      });
-      return reply({ ok: true });
     }
     const { data: target, error } = await service
       .from("tUser")
@@ -175,30 +205,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(
         "The sole Admin cannot be disabled, reset or deleted here. Use My account.",
       );
-    if (action === "reset") {
-      passwordValid();
-      // Deny old sessions at the database before modifying credentials.
-      check(
-        (
-          await service
-            .from("tUser")
-            .update({ must_change_password: true })
-            .eq("id", target.id)
-        ).error,
-      );
-      check(
-        (await service.auth.admin.updateUserById(target.id, { password }))
-          .error,
-      );
-      await service.rpc("revoke_account_sessions", { p_id: target.id });
-      await audit(target.id, "password_reset", null, {
-        must_change_password: true,
-      });
-    } else if (
-      action === "disable" ||
-      action === "enable" ||
-      action === "delete"
-    ) {
+    if (action === "disable" || action === "enable" || action === "delete") {
       const deleted = action === "delete";
       if (deleted && body.confirm !== target.email)
         throw new Error("Type the user email to confirm deletion.");
@@ -231,19 +238,16 @@ Deno.serve(async (req: Request) => {
     } else if (action === "edit") {
       if (!name || name.length > 120 || typeof body.email !== "string")
         throw new Error("Email and name required.");
-      check(
-        (
-          await service.auth.admin.updateUserById(target.id, {
-            email: body.email.trim(),
-            email_confirm: true,
-          })
-        ).error,
-      );
+      if (
+        body.email &&
+        body.email.trim().toLowerCase() !== target.email.toLowerCase()
+      )
+        throw new Error("Account email changes are not available here.");
       check(
         (
           await service
             .from("tUser")
-            .update({ email: body.email.trim(), display_name: name })
+            .update({ display_name: name })
             .eq("id", target.id)
         ).error,
       );

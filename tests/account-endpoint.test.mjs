@@ -1,0 +1,143 @@
+import { readFile } from "node:fs/promises";
+import { transform } from "esbuild";
+import assert from "node:assert/strict";
+const source = (
+  await readFile(
+    new URL("../supabase/functions/manage-users/index.ts", import.meta.url),
+    "utf8",
+  )
+).replace(
+  /import \{ createClient \} from "[^"]+";/,
+  "const createClient=deps.createClient;",
+);
+const { code } = await transform(source, { loader: "ts", format: "esm" });
+async function request(
+  body,
+  { role = "management", active = true, reserveError = null } = {},
+) {
+  let handler;
+  const events = [];
+  const record = (name, value) => {
+    events.push({ name, value });
+    return { error: null };
+  };
+  const service = {
+    auth: {
+      admin: {
+        inviteUserByEmail: async (email) => {
+          record("mail", email);
+          return { data: { user: { id: "invited" } }, error: null };
+        },
+        updateUserById: async (...args) => record("admin-update", args),
+      },
+    },
+    from: (table) => ({
+      insert: async (value) => record(`insert:${table}`, value),
+      update: (value) => ({ eq: async () => record(`update:${table}`, value) }),
+      select: () => ({
+        eq: () => ({
+          single: async () => ({
+            data: {
+              id: "other",
+              email: "other@test.invalid",
+              app_role: "management",
+            },
+            error: null,
+          }),
+        }),
+      }),
+    }),
+  };
+  const caller = {
+    auth: {
+      getUser: async () => ({
+        data: { user: { id: "self", email: "self@test.invalid" } },
+        error: null,
+      }),
+      updateUser: async (value) => record("self-password", value),
+    },
+    rpc: async (name) =>
+      name === "account_status"
+        ? {
+            data: {
+              id: "self",
+              app_role: role,
+              is_active: active,
+              is_deleted: false,
+              must_change_password: false,
+            },
+            error: null,
+          }
+        : { data: "reservation", error: reserveError },
+  };
+  let clients = 0;
+  new Function("Deno", "deps", "fetch", code)(
+    { env: { get: () => "test-runtime" }, serve: (fn) => (handler = fn) },
+    { createClient: () => (clients++ === 0 ? service : caller) },
+    async (url, options) => {
+      assert.equal(url, "test-runtime/auth/v1/user");
+      assert.equal(options.headers.Authorization, "Bearer test");
+      record("self-password", JSON.parse(options.body));
+      return { ok: true };
+    },
+  );
+  const res = await handler(
+    new Request("https://test.invalid", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+  return { status: res.status, body: await res.json(), events };
+}
+for (const role of ["management", "admin"]) {
+  for (const action of ["reset", "create"]) {
+    const r = await request(
+      { action, id: "other", password: "never-send-this-password" },
+      { role },
+    );
+    assert.equal(r.status, 403);
+    assert.equal(r.events.length, 0);
+  }
+  const other = await request(
+    { action: "password", id: "other", password: "never-send-this-password" },
+    { role },
+  );
+  assert.equal(other.status, 403);
+  assert.equal(other.events.length, 0);
+  const own = await request(
+    { action: "password", password: "a-new-self-password" },
+    { role },
+  );
+  assert.equal(own.status, 200);
+  assert.ok(own.events.some((e) => e.name === "self-password"));
+  assert.ok(!own.events.some((e) => e.name === "admin-update"));
+  const invite = await request(
+    { action: "invite", email: "New@Test.Invalid", app_role: "admin" },
+    { role },
+  );
+  assert.equal(invite.status, 200);
+  const user = invite.events.find((e) => e.name === "insert:tUser").value;
+  assert.equal(user.app_role, "management");
+  assert.equal(user.created_by, "self");
+  assert.equal(user.must_change_password, true);
+  assert.ok(!JSON.stringify(invite.body).includes("password"));
+}
+const blocked = await request(
+  { action: "invite", email: "new@test.invalid" },
+  { reserveError: { message: "Admin has paused new account invitations" } },
+);
+assert.equal(blocked.status, 400);
+assert.equal(blocked.events.length, 0);
+const disabled = await request(
+  { action: "invite", email: "new@test.invalid" },
+  { active: false },
+);
+assert.equal(disabled.status, 403);
+assert.equal(disabled.events.length, 0);
+console.log(
+  "PASS: manager/Admin invitations, forced Management role, paused/disabled denial, and self-only password changes with legacy resets denied.",
+);

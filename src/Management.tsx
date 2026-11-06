@@ -59,176 +59,181 @@ export function Account() {
 }
 export function Users() {
   const { profile } = useAccount();
-  const r = useRows<Profile>("tUser");
-  const a = useAction(r.reload);
-  const [selectedId, setSelectedId] = useState("");
-  const selected = r.data.find((p) => p.id === selectedId) ?? null;
-  const [name, setName] = useState("");
+  const policy = useRows<{
+    id: boolean;
+    invitations_paused: boolean;
+    email_ready: boolean;
+  }>("tAccountPolicy");
+  const users = useRows<Profile>("tUser");
+  const a = useAction(async () => {
+    await policy.reload();
+    await users.reload();
+  });
+  const [editId, setEditId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
-  if (profile.app_role !== "admin")
-    return <Intro title="Admin access required" />;
-  function select(p: Profile | null) {
-    setSelectedId(p?.id ?? "");
-    setName(p?.display_name ?? "");
-    setEmail(p?.email ?? "");
-    setPassword("");
-  }
+  const [name, setName] = useState("");
+  const p = policy.data[0];
   return (
     <>
-      <Intro title="Manage Users">
-        Create Management accounts and issue temporary passwords. Disabled
-        accounts immediately lose data access.
+      <Intro title="Accounts & Invitations">
+        Invite a new manager by email. Each person sets and resets their own
+        password.
       </Intro>
-      <Notice error={r.error} loading={r.loading} />
-      <div className="workspace-columns">
-        <section className="card">
-          <button className="primary" onClick={() => select(null)}>
-            New Management user
+      <Notice error={policy.error || users.error} />
+      <section className="card">
+        <p>
+          {!p?.email_ready
+            ? "Email delivery is awaiting setup."
+            : p.invitations_paused
+              ? "New account invitations are paused by Admin."
+              : "New account invitations are open."}
+        </p>
+        {profile.app_role === "admin" && (
+          <button
+            className="subtle"
+            disabled={a.busy || !p}
+            onClick={() =>
+              void a.run(async () => {
+                const { error } = await db().rpc("set_invitations_paused", {
+                  p_paused: !p!.invitations_paused,
+                });
+                if (error) throw error;
+              })
+            }
+          >
+            {p?.invitations_paused
+              ? "Resume new accounts"
+              : "Pause new accounts"}
           </button>
-          {r.data.map((p) => (
-            <button className="list-item" key={p.id} onClick={() => select(p)}>
-              <strong>{p.display_name}</strong>
-              <small>
-                {p.email} · {p.app_role} ·{" "}
-                {p.is_deleted ? "Deleted" : p.is_active ? "Active" : "Disabled"}
-              </small>
-            </button>
+        )}
+        <form
+          className="editor"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void a.run(() =>
+              manage({ action: "invite", email, display_name: name }),
+            );
+          }}
+        >
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label>
+            Display name (optional)
+            <input
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <button
+            className="primary"
+            disabled={a.busy || !p?.email_ready || p.invitations_paused}
+          >
+            Send invitation
+          </button>
+        </form>
+        <Notice error={a.status} />
+      </section>
+      {profile.app_role === "admin" && (
+        <section className="card">
+          <h3>Account access</h3>
+          {users.data.map((u) => (
+            <div className="button-row" key={u.id}>
+              <span>
+                {u.display_name} · {u.email} ·{" "}
+                {u.is_active ? "Active" : "Disabled"}
+              </span>
+              {u.app_role !== "admin" && !u.is_deleted && (
+                <button
+                  className="subtle"
+                  disabled={a.busy}
+                  onClick={() =>
+                    void a.run(() =>
+                      manage({
+                        action: u.is_active ? "disable" : "enable",
+                        id: u.id,
+                      }),
+                    )
+                  }
+                >
+                  {u.is_active ? "Disable" : "Enable"}
+                </button>
+              )}
+              {u.app_role !== "admin" && !u.is_deleted && (
+                <button
+                  className="subtle"
+                  onClick={() => {
+                    setEditId(u.id);
+                    setEditName(u.display_name);
+                    setConfirmEmail("");
+                  }}
+                >
+                  Edit access
+                </button>
+              )}
+              {editId === u.id && !u.is_deleted && (
+                <form
+                  className="editor"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void a.run(() =>
+                      manage({
+                        action: "edit",
+                        id: u.id,
+                        email: u.email,
+                        display_name: editName,
+                      }),
+                    );
+                  }}
+                >
+                  <label>
+                    Display name
+                    <input
+                      required
+                      maxLength={120}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                  </label>
+                  <button disabled={a.busy}>Save name</button>
+                  <label>
+                    Type this account's email to delete access
+                    <input
+                      type="email"
+                      value={confirmEmail}
+                      onChange={(e) => setConfirmEmail(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={a.busy || confirmEmail !== u.email}
+                    onClick={() =>
+                      void a.run(() =>
+                        manage({
+                          action: "delete",
+                          id: u.id,
+                          confirm: confirmEmail,
+                        }),
+                      )
+                    }
+                  >
+                    Delete access
+                  </button>
+                </form>
+              )}
+            </div>
           ))}
         </section>
-        <section className="card">
-          <h3>{selected ? "Edit account" : "Create Management account"}</h3>
-          <form
-            className="editor"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void a.run(() =>
-                manage({
-                  action: selected ? "edit" : "create",
-                  id: selected?.id,
-                  email,
-                  display_name: name,
-                  password,
-                }),
-              );
-            }}
-          >
-            <label>
-              Display name
-              <input
-                required
-                maxLength={120}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-            <label>
-              Email
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            {(!selected || selected.app_role !== "admin") && (
-              <>
-                <label>
-                  Temporary password
-                  <input
-                    type={show ? "text" : "password"}
-                    autoComplete="new-password"
-                    minLength={12}
-                    required={!selected}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </label>
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className="subtle"
-                    onClick={() => {
-                      setPassword(
-                        Array.from(
-                          crypto.getRandomValues(new Uint8Array(24)),
-                          (v) => v.toString(16).padStart(2, "0"),
-                        ).join(""),
-                      );
-                      setShow(true);
-                    }}
-                  >
-                    Generate password
-                  </button>
-                  <button
-                    type="button"
-                    className="subtle"
-                    onClick={() => setShow(!show)}
-                  >
-                    {show ? "Hide" : "Show"}
-                  </button>
-                </div>
-                <p className="muted">
-                  Share this password privately. The user must replace it at
-                  their next sign-in.
-                </p>
-              </>
-            )}
-            <button
-              className="primary"
-              disabled={a.busy || selected?.app_role === "admin"}
-            >
-              {selected ? "Save account" : "Create user"}
-            </button>
-          </form>
-          {selected?.app_role === "management" && (
-            <div className="button-row">
-              <button
-                className="subtle"
-                disabled={a.busy || password.length < 12}
-                onClick={() =>
-                  void a.run(() =>
-                    manage({ action: "reset", id: selected.id, password }),
-                  )
-                }
-              >
-                Issue reset password
-              </button>
-              <button
-                className="subtle"
-                disabled={a.busy || selected.is_deleted}
-                onClick={() =>
-                  void a.run(() =>
-                    manage({
-                      action: selected.is_active ? "disable" : "enable",
-                      id: selected.id,
-                    }),
-                  )
-                }
-              >
-                {selected.is_active ? "Disable" : "Enable"}
-              </button>
-              <button
-                className="danger"
-                disabled={a.busy || selected.is_deleted}
-                onClick={() => {
-                  const confirm = window.prompt(
-                    "Type the account email to delete access. Historical attribution will be retained.",
-                  );
-                  if (confirm)
-                    void a.run(() =>
-                      manage({ action: "delete", id: selected.id, confirm }),
-                    );
-                }}
-              >
-                Delete access
-              </button>
-            </div>
-          )}
-          <Notice error={a.status} />
-        </section>
-      </div>
+      )}
     </>
   );
 }

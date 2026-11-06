@@ -1,0 +1,33 @@
+create table public."tAccountPolicy"(id boolean primary key default true check(id), invitations_paused boolean not null default false,email_ready boolean not null default false,updated_at timestamptz not null default now());
+insert into public."tAccountPolicy"(id) values(true);
+alter table public."tAccountPolicy" enable row level security;
+revoke all on public."tAccountPolicy" from anon,authenticated;
+grant select on public."tAccountPolicy" to authenticated;
+grant all on public."tAccountPolicy" to service_role;
+create policy account_policy_read on public."tAccountPolicy" for select to authenticated using((select scorekeeper_private.can_use()));
+create trigger account_policy_audit after update on public."tAccountPolicy" for each row execute function scorekeeper_private.audit();
+create table public."tInvitation"(id uuid primary key default gen_random_uuid(),email text not null check(email=lower(btrim(email)) and length(email) between 3 and 254),invited_by uuid not null references public."tUser"(id),status text not null default 'pending' check(status in('pending','sent','failed')),created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create unique index pending_invitation_email on public."tInvitation"(email) where status in('pending','sent');
+alter table public."tInvitation" enable row level security;
+revoke all on public."tInvitation" from anon,authenticated;
+grant select on public."tInvitation" to authenticated;
+grant all on public."tInvitation" to service_role;
+create policy invitation_read on public."tInvitation" for select to authenticated using((select scorekeeper_private.can_use()) and (invited_by=auth.uid() or (select scorekeeper_private.is_admin())));
+create trigger invitation_audit after insert or update on public."tInvitation" for each row execute function scorekeeper_private.audit();
+create function public.set_invitations_paused(p_paused boolean) returns void language plpgsql security definer set search_path='' as $$ begin
+ if not scorekeeper_private.is_admin() then raise exception 'Only Admin can pause or resume invitations';end if;
+ if p_paused is null then raise exception 'A pause setting is required';end if;
+ update public."tAccountPolicy" set invitations_paused=p_paused,updated_at=now() where id=true;
+end $$;
+create function public.reserve_invitation(p_email text) returns uuid language plpgsql security definer set search_path='' as $$ declare policy public."tAccountPolicy";invitation uuid;begin
+ if not scorekeeper_private.can_use() then raise exception 'An active account is required';end if;
+ select * into policy from public."tAccountPolicy" where id=true for share;
+ if policy.invitations_paused then raise exception 'Admin has paused new account invitations';end if;
+ if not policy.email_ready then raise exception 'Email delivery is not configured yet';end if;
+ if p_email is null or length(p_email)>254 or p_email !~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$' then raise exception 'Enter a valid email address';end if;
+ if exists(select 1 from public."tUser" where lower(email)=lower(btrim(p_email))) then raise exception 'This email already has an account';end if;
+ insert into public."tInvitation"(email,invited_by) values(lower(btrim(p_email)),auth.uid()) returning id into invitation;
+ return invitation;
+end $$;
+revoke all on function public.set_invitations_paused(boolean),public.reserve_invitation(text) from public,anon;
+grant execute on function public.set_invitations_paused(boolean),public.reserve_invitation(text) to authenticated;

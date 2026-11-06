@@ -2,7 +2,6 @@ import { Account, Fencers, Presets, Users } from "./Management";
 import { Events, Teams, RunEvent } from "./Events";
 import { History } from "./History";
 import Configuration from "./Configuration";
-import { useAccount } from "./Auth";
 import { Intro } from "./ui";
 import {
   dashboardTiles,
@@ -11,7 +10,6 @@ import {
   type Route,
 } from "./navigation";
 export default function Pages({ route }: { route: Route }) {
-  const { profile } = useAccount();
   const tiles =
     route === "/"
       ? dashboardTiles
@@ -34,20 +32,16 @@ export default function Pages({ route }: { route: Route }) {
             }
           />
           <div className="nav-tile-grid">
-            {tiles
-              .filter(
-                (t) => t.route !== "/users" || profile.app_role === "admin",
-              )
-              .map((t) => (
-                <a className="nav-tile" href={`#${t.route}`} key={t.route}>
-                  <span className="nav-symbol">{t.icon}</span>
-                  <div className="nav-tile-body">
-                    <h3>{t.title}</h3>
-                    <p>{t.description}</p>
-                  </div>
-                  <span className="nav-tile-arrow">↗</span>
-                </a>
-              ))}
+            {tiles.map((t) => (
+              <a className="nav-tile" href={`#${t.route}`} key={t.route}>
+                <span className="nav-symbol">{t.icon}</span>
+                <div className="nav-tile-body">
+                  <h3>{t.title}</h3>
+                  <p>{t.description}</p>
+                </div>
+                <span className="nav-tile-arrow">↗</span>
+              </a>
+            ))}
           </div>
         </>
       );

@@ -1,3 +1,23 @@
+# Email invitation release — November 6, 2026
+
+Prepared against production main `1384493fe4353dd8337d9883552aff43e9eafef2`. This section supersedes the historical initial-release procedure below.
+
+- Active managers and Admin invite Management accounts by email. No inviter receives a password or credential link.
+- Password changes use the verified caller token. Other-user resets and legacy temporary-password creation are denied.
+- Only Admin can pause new invitations. Public signup stays disabled; recovery remains available while invitations are paused.
+- Local database, actual-handler endpoint and tournament tests pass; the production client builds. Live email delivery remains unverified until provider setup.
+
+Activation order:
+1. Complete free Brevo signup, verify the sender and enter SMTP credentials directly in Supabase Auth. Never commit or paste SMTP keys into chat.
+2. Apply `20261106180204_email_invitations.sql`; readiness defaults false. Deploy the updated `manage-users` with JWT verification.
+3. Allow production `?auth=invite` and `?auth=recovery` redirect URLs. Disable the old `scorekeeper_block_email` Send Email hook after custom SMTP is configured. Keep public signup disabled.
+4. Merge/deploy the tested client. Verify a recovery email reaches the existing Admin and the password can be set by its owner.
+5. Enable `tAccountPolicy.email_ready` using trusted service access only after delivery verification. Verify invitation, first-password setup, manager permissions and Admin pause.
+
+Invitation reservations serialize with pause changes: already-reserved deliveries may finish; new reservations are blocked. Failed delivery attempts are marked failed and can be retried. Provider interruptions can leave a pending reservation requiring operator review.
+
+---
+
 # Release status and procedure
 
 Prepared on November 6, 2026, from main `d7cf7b95ec177f724aabcc0a603b0a6c8a4c7b68`.
