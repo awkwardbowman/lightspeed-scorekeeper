@@ -38,7 +38,7 @@ PR #4 (codex/fencer-editor) remains open. It improves selection and first-save i
    - Timer is an accessible start/pause control. Paused-only quick scores are fixed: +1 Indirect, +3 Clean hit, +5 Counter.
    - Manage contains timer edits, retained chronological log, confirmed reversal and completion.
    - Admin Mode shows staged score arrows and centered Assign Winner controls: left victory, draw, incomplete, right victory.
-   - Use an Admin Mode penalty popup with card type, configurable reason tiles (initially Safety and Power), opponent point amount, and same-event disciplinary history. Direct award vs next-hit arming awaits confirmation.
+   - Use an Admin Mode penalty popup with card type, configurable reason tiles (initially Safety and Power), opponent point amount, and same-event disciplinary history. Confirm atomically records the card and awards selected opponent points; Cancel records nothing.
 6. Read models, reports and event integration.
    - Update vMatchResults, vFencerResults, vFencerStatistics, vFencerScoring, standings, History.tsx and CSV/report export as one consistency change.
    - Remove the current rule that treats every manual ending as incomplete.
@@ -63,15 +63,17 @@ Confirmed:
 - Admin Mode also offers up/down arrow controls for Score to Win. Adjust the match-specific target without modifying the shared preset. Paused-only, persisted and audited. No-target remains supported; exact arrow behavior at that boundary and target-change finalization behavior still need specification.
 - Cards are managed in Admin Mode, only while paused. Use a penalty popup identifying the sanctioned fencer, offering card choices, configurable reason tiles and referee-selected points awarded to the opponent. Initial reason categories: Safety and Power. Preserve card/reason/points/actor/time and reversal history independently of ordinary hit categories.
 - Show each fencer's prior card record from the SAME event while the penalty popup is open. Do not mix other events or standalone matches into that disciplinary record. Standalone matches have no event-wide card history.
-- The earlier one-pending-card-per-side/replacement proposal was accepted, followed by the popup/direct-point-entry redesign above. Whether confirming the popup directly applies a penalty or still arms a later score remains to be confirmed; do not implement both and double-award.
+- CONFIRMED CARD COMMIT: The popup collects the card type, penalized fencer, reason and opponent point amount. Confirm atomically records the complete penalty and awards those points to the opponent, then closes on successful save. Cancel closes without recording a card or awarding points. This replaces next-hit arming; do not retain an armed card or double-award points. A failed save must not appear successful or lose the entered information.
 
 Unresolved:
 - Candidate card types named by the owner: Yellow, Red, Black and Double Black. Their official meaning, automatic disqualification effects and point restrictions are not confirmed. Do not invent sanctions from the names.
-- Preferred proposed simplification: popup confirmation directly commits one attributed opponent penalty award for the selected amount, replacing next-hit arming. This needs confirmation.
-- Tied knockout behavior is under discussion. Options: save an official draw and flag it for correction in Run Event before bracket advancement; or explicitly label matches Knockout vs Standard and enter configurable overtime on a tied knockout expiry.
-- The overtime idea is a proposal: one minute by default, configurable, with a lightly pulsing red screen border. Automatic clock restart, sudden death vs full period, repeated ties, target-reached ties and reduced-motion handling remain unspecified. No overtime rule is approved yet.
+- RESOLVED: Popup Confirm directly commits the card and selected opponent penalty points together; Cancel commits nothing.
+- CONFIRMED MATCH TYPE: Explicit Standard / Knockout classification, shown on the live scoreboard as part of the win condition; example: "Standard | First to 12 Points". A tied Knockout match enters overtime at time expiry rather than being finalized as a draw. Event phase context must select the appropriate type; do not confuse competition type with Traditional / Control Point scoring mode.
+- CONFIRMED OVERTIME: Knockout overtime is sudden death: first score wins, with a maximum of one minute (initial default; overtime-duration configuration remains in scope). Preserve the scoreboard and clearly identify overtime. The proposed paused entry/tap-to-start clock and lightly pulsing red border have not been explicitly confirmed; support reduced motion if the pulse is adopted. Behavior after a scoreless overtime minute is UNKNOWN and must not be invented. Stop the timer at zero, retain the unresolved tie and require an explicit resolution before any winner advances; this stop-and-flag handling is a proposed safe fallback pending owner confirmation. Target-reached ties and corrections/reversals of an overtime-winning score still require precise lifecycle handling.
 - Whichever option is chosen, an unresolved knockout tie must not select an arbitrary advancing winner. Run Event should identify questionable results before generating a bracket or advancing dependent fixtures.
 
+
+Overtime acceptance: show Standard / Knockout beside the win condition; tied Knockout expiry enters sudden death, first score wins, capped at one minute. Scoreless overtime expiry remains an open product decision; no arbitrary advancing winner.
 
 ## Scope boundaries
 
