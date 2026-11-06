@@ -193,6 +193,28 @@ Implementation dependencies / safe defaults to test:
 10. COLOR SCOPE AND LEGACY FALLBACK. The eventual fencer/team default colors, match-level overrides and persisted historical color snapshots are not yet in the schema. Until implemented, use clear neutral/left-right distinction and never rely on color alone in the score log. Future colors should not block the initial two-screen rebuild unless specifically prioritized.
 11. EVENT INTEGRATION. Reuse the live Traditional component for registered event bouts, but preserve group-tie and elimination-winner rules, manual bracket advancement, archived-generation exclusion and event finalization snapshots. Verify that match outcome overrides, Incomplete bouts and score adjustments cannot prematurely propagate bracket winners or corrupt completed standings.
 
+### 6G. PR setup decisions — 2026-11-06 (approved behavior and remaining proposals)
+
+This section supersedes conflicting earlier timer, completion, Admin Mode and card-design notes in §6A–6F and §11. These are requirements for implementation, not deployed behavior. Draft PR #5 tracks setup: https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/5.
+
+Confirmed:
+- Time expiry or reaching Score to Win automatically finalizes the result without navigating away from the scoreboard. The current referee can correct a finalized result through audited Admin Mode. Preserve prior completion versions and guard event-dependent changes.
+- Any authorized Management/Admin referee holding the match claim may use Admin Mode; account-level Admin is not required. Enforce this on the server.
+- Opening Manage pauses the clock. Closing it does not resume automatically.
+- Allow remaining-time increases beyond the originally selected preset duration so a wrong preset can be corrected in place. Preserve the original preset/settings provenance and audit before/after effective settings. Update the existing database duration cap deliberately; do not merely bypass client validation.
+- Admin Mode also offers up/down arrow controls for Score to Win. Adjust the match-specific target without modifying the shared preset. Paused-only, persisted and audited. No-target remains supported; exact arrow behavior at that boundary and target-change finalization behavior still need specification.
+- Cards are managed in Admin Mode, only while paused. Use a penalty popup identifying the sanctioned fencer, offering card choices, configurable reason tiles and referee-selected points awarded to the opponent. Initial reason categories: Safety and Power. Preserve card/reason/points/actor/time and reversal history independently of ordinary hit categories.
+- Show each fencer's prior card record from the SAME event while the penalty popup is open. Do not mix other events or standalone matches into that disciplinary record. Standalone matches have no event-wide card history.
+- The earlier one-pending-card-per-side/replacement proposal was accepted, followed by the popup/direct-point-entry redesign above. Whether confirming the popup directly applies a penalty or still arms a later score remains to be confirmed; do not implement both and double-award.
+
+Unresolved:
+- Candidate card types named by the owner: Yellow, Red, Black and Double Black. Their official meaning, automatic disqualification effects and point restrictions are not confirmed. Do not invent sanctions from the names.
+- Preferred proposed simplification: popup confirmation directly commits one attributed opponent penalty award for the selected amount, replacing next-hit arming. This needs confirmation.
+- Tied knockout behavior is under discussion. Options: save an official draw and flag it for correction in Run Event before bracket advancement; or explicitly label matches Knockout vs Standard and enter configurable overtime on a tied knockout expiry.
+- The overtime idea is a proposal: one minute by default, configurable, with a lightly pulsing red screen border. Automatic clock restart, sudden death vs full period, repeated ties, target-reached ties and reduced-motion handling remain unspecified. No overtime rule is approved yet.
+- Whichever option is chosen, an unresolved knockout tie must not select an arbitrary advancing winner. Run Event should identify questionable results before generating a bracket or advancing dependent fixtures.
+
+
 ## 7. Page 5 — Manage Events and Teams
 
 - Each event has a name, Traditional or Control Point scoring mode, individual OR team competition format (not mixed in one event), optional dates, description and compatible default preset. Venue/organizer/event-image extras are outside the initial editor.
