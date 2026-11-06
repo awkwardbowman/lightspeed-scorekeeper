@@ -124,7 +124,7 @@ STATUS: Two-stage Match Prep / Live Match design and scoring ledger were merged 
 - MATCH COMPLETE: Provide a "Match Complete" button within Manage/Admin Mode, with explicit confirmation before ending/finalizing. Automatically award the score-derived win/loss/draw EVEN FOR MANUAL COMPLETION. When Admin Mode is enabled, show all four result choices together beneath a centered "Assign Winner" header under the scoreboard, as specified in §6E. Incomplete saves the bout as not finalized, with no official outcome. Keep the scoreboard visible and retain the deliberate Match Report transition. Do not discard calls.
 - Keep safe/save/retry/offline and expired-claim recovery controls available in an appropriate management/error surface without cluttering the central live scoreboard.
 
-### 6D. Data contract and migration impact (design only; NO migration applied)
+### 6D. Historical data-contract proposals before PR #5 (migration now applied; retained for provenance)
 
 - EXISTING fields satisfy the requested match settings: public."tTraditionalMatch".target_score = ScoreToWin, duration_ms = MatchDurationMinutes stored as milliseconds, remaining_ms = TimeRemaining stored as milliseconds. Likewise, tMatchPreset already contains duration_ms and target_score. Preserve configured duration separately from current remaining time and save an authoritative pause/checkpoint value; avoid duplicative columns named exactly ScoreToWin, MatchDurationMinutes or TimeRemaining.
 - EXISTING public."tTraditionalCall" contains id, match_id, side, call_type, points, match_time_ms, recorded_at and is_reversed. Existing tAudit triggers log match and call changes with actor/time/old/new data. However, current frontend removes reverted calls from its local array and the save_match RPC treats missing calls as reversed; the new UI/persistence flow must retain and reconstruct BOTH active and reversed rows without accidentally reactivating or discarding them.
@@ -133,9 +133,9 @@ STATUS: Two-stage Match Prep / Live Match design and scoring ledger were merged 
 - Anticipated future color persistence: default fencer/team colors (source model not yet chosen) and a per-match left/right color snapshot or safe equivalent; do not design the log to derive historical colors only from mutable current profile/team settings.
 - Timer edits should be durable across checkpoint/reconnect and auditable; do not rewrite initial duration or manipulate every timer display tick as a DB write. Match ID, preset/settings, fencer identity, call chronology, all reversed calls, referee claims and original historical records remain intact.
 - The Match Prep → Live Match navigation is a screen/UI state and does not itself require a new table or a separate match schema. The existing "ready/running/paused/ended" states may be extended as needed while preserving legacy records and tournament integration.
-- Implementation requires UI reorganization plus a deliberate persistence/API audit for reversible calls, manual score adjustments, card-linked scores, result adjudication and historical snapshots. DB migrations may be needed for reversal attribution, per-call post-score snapshots and later color defaults/overrides; obtain explicit migration authorization separately.
+- Historical audit: the UI and data contract needed reversible calls, attributed administrative adjustments, penalty provenance, result adjudication and score snapshots. The approved additive PR #5 migration implemented the required ledger/operation model; later color-profile and match-specific color snapshots remain separately scoped.
 
-### 6E. Result adjudication, penalty cards and Admin Mode score adjustments — APPROVED 2026-11-06 (not yet implemented)
+### 6E. Historical result, card and Admin Mode proposals (superseded by merged §6G–6H and §14 UI refinements)
 
 RESULTS ON COMPLETION
 - When a referee confirms Match Complete, compute the initial win/loss/tie outcome automatically from the ACTUAL effective scoreboard totals, regardless of whether the match ended because time expired, target was reached or the referee finished it manually. Left higher = left victory/right defeat; right higher = right victory/left defeat; equal scores = tie, subject to existing elimination-round winner requirement. Do not record an ordinary non-tied manually completed bout as incomplete just because its end_reason is 'manual'. This explicitly supersedes the previous unresolved manual-finish decision.
@@ -159,7 +159,7 @@ ADMIN MODE SCORE ARROWS AND AUDITED DELTA
 - A save/revision conflict or network error must not close the panel and falsely claim success; keep the staged change available for retry or explicit discard. Restore the normal Live Match view only after the authoritative save succeeds. After Admin Mode closes, the timer stays paused until the referee starts it.
 - Recompute the score-based default winner from effective totals (including admin adjustments); an explicit result override, if present, remains separately distinguishable. Match Complete still requires its own confirmation.
 
-DATABASE AND READ-MODEL REQUIREMENTS (no migration applied)
+HISTORICAL DATABASE / READ-MODEL PROPOSAL (PR #5 MIGRATION APPLIED)
 - Existing tTraditionalMatch.duration_ms, remaining_ms, target_score and tTraditionalCall.is_reversed continue to meet timer/target/reversal requirements. Ordinary tTraditionalCall points are CONSTRAINED to 1,3,5 and call_type to indirect/clean/counter, so negative/other admin score adjustments cannot be stored as ordinary calls without an intentional schema change.
 - Add an append-only match score-adjustment event/ledger (recommended) or an equivalent versioned event model with match ID, both old/new totals, signed per-side deltas, actor/time, active/reversal state and event ordering. Update transactional saving, calculated scores, score-to-win detection, reporting, aggregate views and tournament propagation to consume this ledger consistently and without double counting. Keep prior records and support existing match history.
 - Preserve card reason separately from the original scoring category, with sanctioned_side and credited_side/points tied to the affected score-call ID. DB change likely needed (additive metadata/table) for durable, auditable card provenance.
@@ -195,7 +195,7 @@ Implementation dependencies / safe defaults to test:
 
 ### 6G. PR setup decisions — 2026-11-06 (approved behavior and remaining proposals)
 
-This section supersedes conflicting earlier timer, completion, Admin Mode and card-design notes in §6A–6F and §11. These are requirements for implementation, not deployed behavior. Merged PR #5 implemented this baseline: https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/5.
+This section supersedes conflicting earlier timer, completion, Admin Mode and card-design notes in §6A–6F and §11. These behaviors were implemented in merged PR #5: https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/5. Hosted browser acceptance is tracked separately, and §14 describes subsequent UI changes.
 
 Confirmed:
 - Time expiry or reaching Score to Win automatically finalizes the result without navigating away from the scoreboard. The current referee can correct a finalized result through audited Admin Mode. Preserve prior completion versions and guard event-dependent changes.
@@ -264,7 +264,7 @@ Rosters, audits and histories:
 - Team History groups all Team instances via TeamIdentityID, shows each instance's name, assigned event, membership changes and resulting team statistics when those features exist. ClonedFromTeamID adds lineage beyond the shared identity.
 - No database migration, production deployment, or claim that this target is live is authorized by this design decision alone.
 
-Implementation: The §7A–7B refactor is implemented and locally verified in PR #6. Production still uses the prior reusable-team/event-roster model until the reviewed migration, trusted image endpoint and client are released together. Individual Traditional events remain the only executable format. See §7C and docs/TEAM_IMAGES_RELEASE.md.
+- The §7A–§7B team/image refactor was implemented and locally verified in merged PR #6. Historical “not deployed” labels describe the state before merge, not the current repository. Verify hosted schema, image function and client independently before claiming production readiness. Traditional individual events remain the only executable competition format.
 
 ### 7B. Shared image library, upload optimization, team logos and colors — MERGED IN PR #6; HOSTED ACCEPTANCE TO VERIFY
 
@@ -335,9 +335,9 @@ Implementation: Shared keyboard mappings, secondary ranking configuration, team 
 ## 11. Outstanding work: active verification vs product decisions vs deferrals
 
 Match Prep / Live Match baseline merged in PR #5; proposed UI changes in §14:
-- Implement §6A–6F: Match Prep, minimalist Live Match and the Manage/Admin Mode surface, including tap-to-toggle clock, fixed +1 Indirect/+3 Clean/+5 Counter quick-score controls, timer arrows, score correction up/down arrows, card-armed opponent scoring, durable colored/reversible log, and a CENTERED "Assign Winner" group of four buttons [← Left Victory] [Draw] [Incomplete] [Right Victory →] under the scoreboard, plus report/recovery integration. The deployed client still uses the original combined setup/live page and 3×3 grid.
+- Core two-stage Match Prep/Live Match, timer, rapid scoring, card popup, Admin score/result corrections, overtime, Match Report and recovery were implemented in merged PR #5; the hosted ledger migration was verified. PR #8 is a focused subsequent presentation/field-flow redesign defined in §14. Do not re-open the old 3×3 scoring baseline or superseded card-arming proposal.
 - The additive PR #5 match_redesign migration and ledger are applied and hosted migration verified. Future modifications to match presets, sync/recovery, result history or Admin Mode require a new compatibility and migration analysis; no additional DDL is authorized by this design draft.
-- Test paused-only scoring, timer corrections, penalty attribution on opponent score, signed admin delta on mode exit, audit-safe reversal and outcome override, refreshed playback, finalization/standings propagation and multi-device referee leases after implementation.
+- Remaining hosted acceptance: test paused-only scoring, timer/target corrections, saved penalties, signed admin changes, audit-safe reversals, outcome overrides, refresh/reconnection, finalization/standings propagation, and multi-device referee claims. Do not treat local test coverage as hosted browser acceptance.
 
 Management-page lookup/create/edit baseline merged in PR #5; proposed UX changes in §14:
 - Lookup/Create/Edit/Archive record-page separation merged in PR #5. The remaining work is consistent design tokens, title case, button layout, ID-first tables, differentiated Users Email/Role, Fencer Name/Affiliation searches and event navigation in §14.
