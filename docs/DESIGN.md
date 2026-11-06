@@ -23,10 +23,10 @@ Merged release provenance:
 - All three PRs are merged. The Vercel production deployment was READY on commit 8dc83a01290d1c6fed58a0751bffb641092108e9 when checked on November 6, 2026.
 - Hosted Supabase migrations include approved_scorekeeper and email_invitations. The manage-users Edge Function was ACTIVE at version 4 with JWT verification when checked.
 
-Email verification and activation distinction:
-- The project owner confirms that Brevo email delivery/workflow has been set up and verified. Treat the custom-SMTP delivery setup as completed, not an open setup/design question.
+Email invitation and password-recovery verification:
+- VERIFIED IN PRODUCTION BY THE OWNER: Brevo email delivery, new Management account invitations (including recipient setup) and self-service password-reset emails/links work end to end with the existing settings. Do not reopen SMTP setup, email activation or these two workflows as pending tasks.
 - The legacy SQL Send Email hook designed to suppress emails in the earlier no-SMTP phase is obsolete. The supported architecture is Brevo custom SMTP with Supabase Auth; do not restore or depend on the email-blocking hook. Its current dashboard enablement state was not independently checked in this documentation pass.
-- Read-only production policy check on November 6: invitations_paused = false and email_ready = false. This application-specific readiness gate still requires reconciliation/activation after verified delivery, even though the owner confirms the email workflow itself was tested. Do not label in-app invitations fully enabled while email_ready is false. Changing this flag is a separate operational action, not a document edit.
+- Historical diagnostic note only: an earlier read-only database query returned invitations_paused = false and email_ready = false. Despite that value, the owner successfully tested actual account invitations and password resets using the current configuration. The prior assumption that email_ready=false necessarily blocks the working production workflow was incorrect. Do not change the flag, hook, SMTP or other production settings merely to address this historical mismatch; investigate its meaning only if a new functional problem arises.
 
 Automated database security, handler, bracket simulation and production build tests have passed. Full real-user browser workflows, multi-device interactions and image uploads should still be exercised. Track functional verification separately from merged code.
 
@@ -57,7 +57,7 @@ Approved current policy, superseding the old Admin-created-temporary-password/no
 - Disabled accounts, revoked sessions, unauthorized callers and unprovisioned Auth users must be denied by backend policies/functions. Keep the sole Admin protected.
 - The app must not expose service-role credentials or SMTP keys in frontend environment variables or the repository.
 
-Implementation: Account/authentication UI and trusted account endpoints are deployed. Brevo SMTP and email workflow are verified by the owner. Confirm the application readiness flag before considering the live invitation feature fully activated; then test invite, acceptance, recovery, pause and disabled-user behavior in the actual app.
+Implementation: Account/authentication UI and trusted account endpoints are deployed. The owner has verified actual new-account invitations, acceptance/password setup and password reset using Brevo and existing production settings. No email configuration work remains. Admin invitation pause, disabled-user access controls and broader role/authorization behavior may still be included in the page-by-page acceptance walkthrough.
 
 ## 4. Page 2 — Manage Fencers
 
@@ -146,8 +146,8 @@ Implementation: Shared keyboard mappings, secondary ranking configuration, team 
 ## 11. Outstanding work: active verification vs product decisions vs deferrals
 
 Active verification/operational follow-up (not new design scope):
-1. Reconcile the Supabase application-specific email_ready flag, which read false even though the owner confirms Brevo email works; verify real in-app invitation availability after enabling it through the trusted service path. Do not re-enable the obsolete no-email hook.
-2. Walk through actual account sign-in/invite/recovery, Admin pause, Manager permissions, disabled-session denial and protected routes.
+1. COMPLETED AND VERIFIED: The owner successfully completed a new-account invitation and password reset with the current production settings. No email-ready flag change, SMTP setup or old no-email hook restoration is required.
+2. Walk through remaining account controls: Admin invitation pause, Management permissions, disabled-session denial and protected routes. Invitation delivery, invitee account setup and self-service password reset have already been tested successfully.
 3. Execute a registered and unregistered standalone bout through calls, corrections, timer end, manual stop and Match Report; verify statistics and history.
 4. Test refresh/offline retry, stale referee lease and simultaneous control of the same bout versus two distinct bouts.
 5. Run real individual Traditional events with groups, manual bracket placement, elimination, regeneration/archiving, finalization and reopened history.
