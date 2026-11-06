@@ -38,7 +38,7 @@ PR #4 (codex/fencer-editor) remains open. It improves selection and first-save i
    - Timer is an accessible start/pause control. Paused-only quick scores are fixed: +1 Indirect, +3 Clean hit, +5 Counter.
    - Manage contains timer edits, retained chronological log, confirmed reversal and completion.
    - Admin Mode shows staged score arrows and centered Assign Winner controls: left victory, draw, incomplete, right victory.
-   - Card selection arms the next opponent score; never creates an immediate award.
+   - Use an Admin Mode penalty popup with card type, configurable reason tiles (initially Safety and Power), opponent point amount, and same-event disciplinary history. Direct award vs next-hit arming awaits confirmation.
 6. Read models, reports and event integration.
    - Update vMatchResults, vFencerResults, vFencerStatistics, vFencerScoring, standings, History.tsx and CSV/report export as one consistency change.
    - Remove the current rule that treats every manual ending as incomplete.
@@ -51,14 +51,27 @@ PR #4 (codex/fencer-editor) remains open. It improves selection and first-save i
    - Update DESIGN.md and its shared Doc only to accurately distinguish proposed, implemented, tested and deployed behavior.
    - Prepare migration/release instructions for review; applying hosted changes or deployment is a separate release action.
 
-## Product decisions pending user response
+## Product decisions
 
-These are questions, not adopted requirements:
-- At time/target, stop and keep results provisional until explicit Match Complete, or finalize automatically?
-- May the currently claimed Management referee use Admin Mode, or only the sole account Admin?
-- Proposed timer/card rules: Manage pauses; remaining time cannot exceed configured duration; one pending card per sanctioned side, replaced by a later card on that side; card arming only while paused; reject knockout draws at finalization.
-- The incomplete/reopen workflow needs explicit agreement, including previously finalized event bouts with already played dependent matches. Do not invalidate descendants silently.
-- Card color/value restrictions remain unspecified; retain referee-selected +1/+3/+5 unless competition rules are supplied.
+See DESIGN.md §6G for the latest confirmed decisions and unresolved card/tied-knockout questions. It supersedes earlier provisional recommendations in this plan.
+
+Confirmed:
+- Time expiry or reaching Score to Win automatically finalizes the result without navigating away from the scoreboard. The current referee can correct a finalized result through audited Admin Mode. Preserve prior completion versions and guard event-dependent changes.
+- Any authorized Management/Admin referee holding the match claim may use Admin Mode; account-level Admin is not required. Enforce this on the server.
+- Opening Manage pauses the clock. Closing it does not resume automatically.
+- Allow remaining-time increases beyond the originally selected preset duration so a wrong preset can be corrected in place. Preserve the original preset/settings provenance and audit before/after effective settings. Update the existing database duration cap deliberately; do not merely bypass client validation.
+- Admin Mode also offers up/down arrow controls for Score to Win. Adjust the match-specific target without modifying the shared preset. Paused-only, persisted and audited. No-target remains supported; exact arrow behavior at that boundary and target-change finalization behavior still need specification.
+- Cards are managed in Admin Mode, only while paused. Use a penalty popup identifying the sanctioned fencer, offering card choices, configurable reason tiles and referee-selected points awarded to the opponent. Initial reason categories: Safety and Power. Preserve card/reason/points/actor/time and reversal history independently of ordinary hit categories.
+- Show each fencer's prior card record from the SAME event while the penalty popup is open. Do not mix other events or standalone matches into that disciplinary record. Standalone matches have no event-wide card history.
+- The earlier one-pending-card-per-side/replacement proposal was accepted, followed by the popup/direct-point-entry redesign above. Whether confirming the popup directly applies a penalty or still arms a later score remains to be confirmed; do not implement both and double-award.
+
+Unresolved:
+- Candidate card types named by the owner: Yellow, Red, Black and Double Black. Their official meaning, automatic disqualification effects and point restrictions are not confirmed. Do not invent sanctions from the names.
+- Preferred proposed simplification: popup confirmation directly commits one attributed opponent penalty award for the selected amount, replacing next-hit arming. This needs confirmation.
+- Tied knockout behavior is under discussion. Options: save an official draw and flag it for correction in Run Event before bracket advancement; or explicitly label matches Knockout vs Standard and enter configurable overtime on a tied knockout expiry.
+- The overtime idea is a proposal: one minute by default, configurable, with a lightly pulsing red screen border. Automatic clock restart, sudden death vs full period, repeated ties, target-reached ties and reduced-motion handling remain unspecified. No overtime rule is approved yet.
+- Whichever option is chosen, an unresolved knockout tie must not select an arbitrary advancing winner. Run Event should identify questionable results before generating a bracket or advancing dependent fixtures.
+
 
 ## Scope boundaries
 
@@ -82,7 +95,7 @@ Do not reopen owner-verified invitation delivery or password recovery configurat
 - While running: score actions and shortcuts cannot add calls.
 - Paused scores: +1/+3/+5 persist the corresponding fixed call types.
 - Admin adjustment 8–5 to 10–4: one atomic event with +2/-1; old calls remain unchanged.
-- Reverse a card-linked hit: retain card, scoring and reversing actor/time, and original score snapshots.
+- Reverse a card penalty: retain its reason, sanctioned fencer, credited opponent, points, scoring and reversing actor/time, and original score snapshots.
 - Manual completion at 8–5: left win; explicit Draw at 8–5: official draw where allowed; Incomplete: no result.
 - Refresh/report/statistics/standings all agree, and stale controllers cannot overwrite newer changes.
 - Reopening a finalized event bout preserves historical completion versions and handles dependent fixtures explicitly.
