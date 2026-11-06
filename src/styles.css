@@ -11,3 +11,69 @@
 .cloud-actions button{min-height:42px}
 .cloud-panel select{width:100%;min-width:180px;background:#101623;color:white;border:1px solid #37445b;border-radius:8px;padding:11px}
 .cloud-message{font-size:.88rem;color:#ffcf90;margin:13px 0 0;overflow-wrap:anywhere}
+
+/* Dashboard, navigation, and editor scaffolding — functionality is added per section. */
+.app-shell{max-width:1220px}
+.app-screen[hidden]{display:none!important}
+.site-header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:23px}
+.site-identity{display:flex;align-items:center;gap:14px;text-decoration:none;color:#e9edf6;min-width:0}
+.site-identity>span:last-child{display:flex;flex-direction:column;gap:2px}
+.site-identity strong{font-size:1.65rem;letter-spacing:-.05em}
+.site-identity .eyebrow{font-size:.6rem}
+.site-mark{width:54px;height:54px;border:1px solid #6f5771;border-radius:15px;background:linear-gradient(145deg,#423a55,#1d283b);display:grid;place-items:center;font-size:1.65rem;color:#ffcb88;flex:none}
+.site-actions{display:flex;gap:17px;align-items:center}
+.account-status{font-size:.75rem;color:#9db9af;font-weight:750;white-space:nowrap}
+.nav-account{color:#eecb94;background:#273144;border:1px solid #3e4b60;text-decoration:none;border-radius:9px;padding:10px 14px;font-size:.82rem;font-weight:800;white-space:nowrap}
+.nav-account:hover{background:#35425b}
+.app-breadcrumb{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:0 0 28px;padding-bottom:16px;border-bottom:1px solid #293548;font-size:.78rem;color:#8fa2bc}
+.app-breadcrumb a{color:#9facbf;text-decoration:none}.app-breadcrumb a:hover{color:#ffcd88}
+.app-breadcrumb strong{font-weight:800;color:#e8edf6}
+.crumb-step{display:inline-flex;align-items:center;gap:9px}
+.page-intro{margin-bottom:27px;max-width:800px}
+.page-intro h2{font-size:clamp(1.7rem,4vw,2.65rem);margin:8px 0 12px;letter-spacing:-.045em;line-height:1.15}
+.page-intro p{font-size:.95rem;color:#a4b5c9;line-height:1.6;margin:0}
+.nav-tile-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:12px 0 28px}
+.nav-tile{background:#151d2b;color:#eef2fa;border:1px solid #2f3d54;border-radius:15px;min-height:216px;padding:20px;display:flex;flex-direction:column;justify-content:space-between;text-decoration:none;transition:border-color .15s,background .15s,transform .15s}
+.nav-tile:not(.locked):hover{border-color:#d0a768;background:#1b2a3e;transform:translateY(-2px)}
+.nav-tile:focus-visible{outline:2px solid #eebd71;outline-offset:4px}
+.nav-tile.locked{background:#131924;border-color:#252f3f;color:#9eacc0;cursor:not-allowed}
+.nav-tile-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.nav-symbol{display:grid;place-items:center;width:46px;height:46px;background:#29354a;color:#f5cd90;border:1px solid #394960;border-radius:12px;font-size:1.35rem}
+.nav-tile.locked .nav-symbol{color:#8a95a7}
+.nav-tile-status{text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#8ba5c0;font-size:.6rem;text-align:right;line-height:1.45}
+.nav-tile-body h3{font-size:1.07rem;margin:10px 0 6px;letter-spacing:-.015em}
+.nav-tile-body p{font-size:.79rem;line-height:1.5;color:#96a8c0;margin:0}
+.nav-tile-arrow{align-self:flex-end;font-size:1.2rem;color:#e9bd78;margin-top:5px}
+.dashboard-note{color:#8295ad;font-size:.8rem;margin:12px 0 30px}
+.subnav-title{font-size:.94rem;color:#c9d4e5;margin:28px 0 12px}
+.scaffold-card{border:1px dashed #4a5b71;background:#141d2a}
+.scaffold-head{font-size:.67rem;letter-spacing:.14em;color:#c4a675;font-weight:850;display:flex;align-items:center;gap:9px}
+.scaffold-dot{width:8px;height:8px;border-radius:50%;background:#cba466;display:inline-block}
+.scaffold-card h3{font-size:1.15rem;margin:15px 0 8px}
+.scaffold-card>p{color:#a3b4c9;font-size:.89rem;line-height:1.6;margin:0}
+.future-features{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+.future-features span{background:#263448;border:1px solid #3a4c65;border-radius:999px;padding:6px 10px;font-size:.71rem;color:#bccbe0}
+.scaffold-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.scaffold-two .scaffold-card{min-width:0}
+.scaffold-picker{display:flex;flex-direction:column;gap:9px;color:#aabbd0;font-weight:750;font-size:.8rem;margin:10px 0 22px;max-width:430px}
+.scaffold-picker select,.draft-grid select{background:#101623;color:#fff;border:1px solid #37445b;border-radius:8px;padding:11px 12px;min-width:0;width:100%;font:inherit}
+.scaffold-picker select:disabled,.draft-grid select:disabled{opacity:.65}
+.draft-card .section-heading h3{margin:0;font-size:1.1rem}
+.draft-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px;margin:12px 0 18px}
+.draft-grid label,.account-signin label{display:flex;flex-direction:column;gap:8px;color:#b6c6dc;font-weight:750;font-size:.82rem}
+.draft-card>.muted{line-height:1.5;margin:10px 0 18px}
+.account-card{max-width:680px}
+.account-card h3{margin:0 0 10px}
+.account-card p{line-height:1.55}
+.account-signin{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.account-signin label{min-width:240px;flex:1}
+.account-signin button{min-height:42px}
+.single-match-ui .app-header{padding:0 0 8px;margin-bottom:20px}
+.single-match-ui .app-header h2{font-size:1.65rem;letter-spacing:-.05em;margin:6px 0 0}
+.single-match-ui .local-tag{color:#a4c3b4}
+.site-footer{text-align:center;color:#6e8098;font-size:.77rem;padding:30px 10px 10px}
+.site-footer a{color:#9eb1cc}
+@media(max-width:1120px){.nav-tile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:780px){.nav-tile-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.nav-tile{min-height:204px;padding:16px}.scaffold-two,.draft-grid{grid-template-columns:1fr}.site-identity strong{font-size:1.3rem}.site-mark{height:42px;width:42px}.site-actions{gap:8px}.account-status{font-size:.65rem}}
+@media(max-width:480px){.nav-tile-grid{grid-template-columns:1fr}.nav-tile{min-height:158px}.site-identity .eyebrow{font-size:.5rem;letter-spacing:.12em}.site-mark{height:38px;width:38px;font-size:1.2rem}.site-header{gap:10px}.nav-account{padding:8px 10px;font-size:.72rem}.site-actions .account-status{display:none}.single-match-ui .app-header{align-items:center}.app-breadcrumb{margin-bottom:23px}}
+@media print{.site-header,.app-breadcrumb,.site-footer,.page-intro,.nav-tile-grid,.scaffold-card,.account-card,.draft-card{display:none!important}}

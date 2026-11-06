@@ -35,3 +35,16 @@ A referee-operated lightsaber fencing scorekeeper, responsive for tablets, phone
 
 ## Stack
 React 19 + TypeScript + Vite 7, browser localStorage; static Vercel deployment.
+
+## Navigation scaffold (MVP v0.3)
+- **Dashboard** has eight tiles: Manage Users (Admin only), Manage Fencers, Manage Events, Match Presets, Run Event, Run Single Match, View History, and Configuration.
+- **Manage Events** leads to event-scoped Teams and roster management (no global Teams main tile).
+- **Run Event** leads to Standings (then Team History), Matches (then Run Event Match), and Create Bracket.
+- **View History** leads to Event History, Match History, and Fencer History, each eventually with searchable pickers and detail drill-down.
+- **Configuration** leads to Team Images, Key Mappings, and General Settings.
+- **Run Single Match** retains the existing Traditional scorekeeper and optional Supabase cloud storage; it currently has no event ID. Its timer stays mounted when navigating away.
+- URLs use hash routes so links, browser Back, and refresh work on the current static Vercel/Vite deployment without server rewrites.
+- The Admin tile and page are access-limited by reading `tUser.app_role` and `tUser.is_active` from Supabase. No admin CRUD actions exist in the client at this stage; future user management must be implemented server-side with a verified Admin authorization check.
+- All other new pages are *scaffolds*, not functioning database editors. Match Preset form is an interactive unsaved preview. Do not imply it has saved anything.
+- Existing account sign-in uses email magic link and `shouldCreateUser: false` to prevent the web UI from auto-registering people. Disabling public Auth signups at the Supabase project level and building Admin-managed credentials are separate upcoming tasks.
+- Future database work: persist match presets, relate teams and rosters to events, implement read/write editors and policies, and add event-linked match runners. No Control Point gameplay rules are assumed yet.

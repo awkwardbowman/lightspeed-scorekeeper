@@ -67,7 +67,7 @@ export default function CloudPanel({ match, onLoad }: CloudPanelProps) {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
       });
       if (error) throw error;
       setMessage('Check your inbox for the sign-in link. Return to this page after signing in.');
