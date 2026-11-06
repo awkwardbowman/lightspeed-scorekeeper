@@ -44,10 +44,10 @@ Deno.serve(async (req: Request) => {
     const passwordValid = () => {
       if (
         typeof password !== "string" ||
-        password.length < 12 ||
+        password.length < 6 ||
         password.length > 128
       )
-        throw new Error("Use a password of 12–128 characters.");
+        throw new Error("Use a password of 6–128 characters.");
     };
     const audit = async (
       recordId: string,
@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
         // Use known codes rather than exposing arbitrary upstream response text.
         const errors: Record<string, string> = {
           same_password: "Choose a password different from your current password.",
-          weak_password: "Choose a stronger password of 12–128 characters.",
+          weak_password: "Choose a password of 6–128 characters.",
           reauthentication_needed: "Sign in again before changing your password.",
           reauthentication_not_valid: "Your verification has expired. Sign in again and retry.",
           over_request_rate_limit: "Too many attempts. Wait a moment and try again.",

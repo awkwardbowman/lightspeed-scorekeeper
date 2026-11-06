@@ -241,13 +241,15 @@ export function PasswordForm({ onDone }: { onDone: () => Promise<void> }) {
         }
       }}
     >
+      <p id="password-requirements" className="muted">Use at least 6 characters.</p>
       <label>
         New password
         <input
           type="password"
           required
-          minLength={12}
+          minLength={6}
           maxLength={128}
+          aria-describedby="password-requirements"
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -258,7 +260,7 @@ export function PasswordForm({ onDone }: { onDone: () => Promise<void> }) {
         <input
           type="password"
           required
-          minLength={12}
+          minLength={6}
           autoComplete="new-password"
           value={confirmation}
           onChange={(e) => setConfirmation(e.target.value)}

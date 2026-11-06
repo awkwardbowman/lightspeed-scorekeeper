@@ -167,7 +167,7 @@ assert.equal(failedPassword.status, 400);
 assert.ok(!failedPassword.events.some(e => e.name === "update:tUser"), "rejected password must not clear first-password gate");
 for (const [code, status, expected] of [
   ["same_password", 422, /different from your current password/],
-  ["weak_password", 422, /stronger password/],
+  ["weak_password", 422, /6–128 characters/],
   ["unknown_error", 401, /session has expired/],
   ["unknown_error", 500, /try again shortly/],
 ]) {
@@ -184,6 +184,17 @@ const firstPassword = await request(
 );
 assert.equal(firstPassword.status, 200);
 assert.ok(firstPassword.events.some(e => e.name === "update:tUser" && e.value.must_change_password === false));
+for (const password of ["abcdef", "123456", "a b c "]) {
+  const result = await request({ action: "password", password });
+  assert.equal(result.status, 200, "six characters need no particular character types");
+  assert.equal(result.events.find(e => e.name === "self-password").value.password, password);
+}
+for (const password of ["", "abcde", "a".repeat(129)]) {
+  const result = await request({ action: "password", password });
+  assert.equal(result.status, 400);
+  assert.match(result.body.error, /6–128 characters/);
+  assert.equal(result.events.length, 0);
+}
 console.log(
   "PASS: manager/Admin invitations, forced Management role, caller/session/password gates, failed delivery, and self-only password changes with legacy resets denied.",
 );
