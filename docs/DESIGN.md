@@ -1,7 +1,7 @@
 # Lightspeed Scorekeeper — Design Specification
 
 Version: 2026-11-06, consolidated following merged PR #1, #2 and #3
-Status: PRs #1–#3 deployed; management-page and Traditional match redesign implemented and locally verified in draft PR #5, pending merge, hosted migration and deployment. See §6G–6H for the latest decisions and implementation status.
+Status: PR #5 merged into main at 80f83d47df1072858733f2e9027ceb98c2aa30a8. The hosted match_redesign migration was applied and verified on 2026-11-06 (hosted version 20261106211610; source file 20261106204518_match_redesign.sql). Existing match/calls were preserved; ledger RLS, API permissions, Safety/Power reasons and 60-second overtime were verified. Full production browser acceptance remains pending. See §6G–6H for implementation details; earlier draft/release-pending labels describe the pre-release state.
 Scope: Lightspeed Saber Academy — Traditional fencing scorekeeper and event administration
 
 ## 1. Authority, references and implementation status
