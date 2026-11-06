@@ -4,9 +4,9 @@ Prepared on November 6, 2026, from main `d7cf7b95ec177f724aabcc0a603b0a6c8a4c7b6
 
 ## Current state
 
-Source changes and a migration are prepared locally. **Nothing in this release has been merged or deployed. The live database has not been migrated.**
+GitHub write access was restored. PR #1 contains the implementation. The hosted Supabase migration is applied, `manage-users` version 1 is active with JWT verification, public signup is disabled, and the SQL Send Email hook is enabled. The original account, one match and its two scoring calls were preserved. A pre-release export was taken before migration.
 
-GitHub's connector rejected branch creation with HTTP 403 (`Resource not accessible by integration`). A local `git push --dry-run` also failed because no GitHub credentials are available. Repository metadata's reported push permission did not establish a working write path. Restore repository Contents read/write authorization before attempting publication.
+Live checks confirmed signup is disabled and unauthenticated table access/account management return HTTP 401. An authenticated-role transactional scoring/statistics check passed on the hosted database, and its test records were rolled back. Production client deployment follows the PR merge.
 
 ## Included
 
@@ -23,7 +23,9 @@ GitHub's connector rejected branch creation with HTTP 403 (`Resource not accessi
 
 `npm run build` checks the application TypeScript and production bundling. The account Edge Function is syntax-checked with esbuild. Browser inspection confirmed the sign-in gate at both Dashboard and a direct standalone-match URL.
 
-**Not yet verified:** deployed Edge Function/Auth account operations, the full authenticated browser workflow, actual object-storage uploads, activation of the hosted no-email Auth hook, and the migration against a hosted staging database. Do these before production promotion. No production passwords or accounts were changed during preparation.
+**Verification limits:** the full authenticated browser workflow, Admin account creation/reset against live Auth, and actual image uploads have not been exercised. Migration tests used disposable PostgreSQL plus an authenticated-role rollback test against the hosted database; no paid hosted staging branch was created. No production passwords were changed.
+
+Security advisors report two intentionally exposed SECURITY DEFINER operations (`account_status` and `set_event_status`), both with explicit caller checks and fixed search paths, plus the pre-existing leaked-password-protection warning. No RLS-disabled table or unsafe-view errors were reported.
 
 ## Deployment order
 

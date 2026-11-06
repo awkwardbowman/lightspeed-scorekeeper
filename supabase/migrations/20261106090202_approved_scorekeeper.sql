@@ -1,4 +1,3 @@
-begin;
 create schema if not exists scorekeeper_private;
 revoke all on schema scorekeeper_private from public;
 grant usage on schema scorekeeper_private to authenticated;
@@ -210,8 +209,6 @@ revoke update on public."tEvent" from authenticated;
 grant update(name,mode,starts_at,ends_at,description,competition_format,preset_id) on public."tEvent" to authenticated;
 revoke all on function public.claim_match(uuid,uuid,boolean),public.save_match(jsonb,jsonb,uuid,integer,boolean),public.standings(uuid,uuid),public.set_event_status(uuid,text) from public,anon;
 grant execute on function public.claim_match(uuid,uuid,boolean),public.save_match(jsonb,jsonb,uuid,integer,boolean),public.standings(uuid,uuid),public.set_event_status(uuid,text) to authenticated;
-commit;
-begin;
 create function scorekeeper_private.guard_lease() returns trigger language plpgsql set search_path='' as $$
 begin
  if tg_op='INSERT' then
@@ -304,8 +301,6 @@ create function public.release_match(p_id uuid,p_token uuid) returns void langua
 end $$;
 revoke all on function public.release_match(uuid,uuid) from public,anon;
 grant execute on function public.release_match(uuid,uuid) to authenticated;
-commit;
-begin;
 create function public.account_status() returns jsonb language sql stable security definer set search_path='' as $$
  select to_jsonb(u) from public."tUser" u where u.id=auth.uid() and auth.uid() is not null and (nullif(auth.jwt()->>'session_id','') is null or exists(select 1 from auth.sessions s where s.id=(auth.jwt()->>'session_id')::uuid and s.user_id=auth.uid()));
 $$;
@@ -314,8 +309,6 @@ grant execute on function public.account_status() to authenticated;
 create function public.revoke_account_sessions(p_id uuid) returns void language sql security definer set search_path='' as $$ delete from auth.sessions where user_id=p_id $$;
 revoke all on function public.revoke_account_sessions(uuid) from public,anon,authenticated;
 grant execute on function public.revoke_account_sessions(uuid) to service_role;
-commit;
-begin;
 create function scorekeeper_private.validate_relation() returns trigger language plpgsql set search_path='' as $$
 declare e public."tEvent"; f public."tFencer"; t public."tTeam"; event_uuid uuid; begin
  if tg_table_name='tEvent' then
@@ -346,8 +339,6 @@ insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) v
 create policy scorekeeper_image_read on storage.objects for select to authenticated using(bucket_id='team-images' and (select scorekeeper_private.can_use()));
 create policy scorekeeper_image_insert on storage.objects for insert to authenticated with check(bucket_id='team-images' and (select scorekeeper_private.can_use()) and exists(select 1 from public."tTeam" t where t.id::text=split_part(name,'/',1) and not t.is_archived));
 create policy scorekeeper_image_delete on storage.objects for delete to authenticated using(bucket_id='team-images' and (select scorekeeper_private.is_admin()));
-commit;
-begin;
 create function scorekeeper_private.phase_order_guard() returns trigger language plpgsql set search_path='' as $$
 begin
  if new.phase='running' and new.phase_id is not null and exists(
@@ -358,8 +349,6 @@ begin
  return new;
 end $$;
 create trigger phase_order_guard before insert or update on public."tTraditionalMatch" for each row execute function scorekeeper_private.phase_order_guard();
-commit;
-begin;
 alter table public."tEventFinalization" add column group_standings jsonb not null default '{}',add column participants jsonb not null default '[]';
 create or replace function public.set_event_status(p_event uuid,p_status text) returns void language plpgsql security definer set search_path='' as $$
 begin
@@ -397,7 +386,6 @@ grant execute on function public.void_match(uuid) to authenticated;
 -- Bound match settings and participant-name snapshots at the database as well as in forms.
 alter table public."tTraditionalMatch" add constraint match_bounds check(duration_ms between 1000 and 10800000 and remaining_ms<=duration_ms and (target_score is null or target_score between 1 and 10000)) not valid;
 alter table public."tTraditionalMatch" add constraint match_names check(length(btrim(left_name)) between 1 and 120 and length(btrim(right_name)) between 1 and 120) not valid;
-commit;
 -- Undefined Control Point mechanics remain unavailable for writes in the initial release.
 revoke insert,update,delete on public."tControlPointMatch",public."tControlPointCall",public."tControlPointTime" from authenticated;
 -- The trusted account endpoint alone manages retained user identities and audit inserts.
