@@ -1,15 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAccount } from "./Auth";
-import {
-  db,
-  manage,
-  rpc,
-  write,
-  type EventRecord,
-  type Fencer,
-  type Preset,
-} from "./data";
+import { manage, rpc, write, type EventRecord, type Preset } from "./data";
 import { Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
+import { EventTeamAssignments } from "./Teams";
 import { Registration } from "./Events";
 
 type Entity = "fencers" | "presets" | "users" | "events" | "teams";
@@ -473,7 +466,13 @@ export function RecordPage({ entity }: { entity: Entity }) {
               <h3>{name(selected)}</h3>
               {entity === "events" ? (
                 <>
-                  <Registration eventId={id} />
+                  {selected.competition_format === "team" ? (
+                    <EventTeamAssignments
+                      event={selected as unknown as EventRecord}
+                    />
+                  ) : (
+                    <Registration eventId={id} />
+                  )}
                   <EventStatus
                     event={selected as unknown as EventRecord}
                     onDone={r.reload}
@@ -486,7 +485,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   </a>
                 </>
               ) : (
-                <TeamRoster team={selected} />
+                <a href="#/events/teams">Manage team instances and rosters</a>
               )}
             </>
           ) : (
@@ -739,112 +738,6 @@ function EventStatus({
           ))}
       </div>
       <Notice error={a.status} />
-    </>
-  );
-}
-function TeamRoster({ team }: { team: Row }) {
-  const { profile } = useAccount();
-  const events = useRows<EventRecord>("tEvent");
-  const fencers = useRows<Fencer>("tFencer");
-  const links = useRows<{ event_id: string; team_id: string }>("tEventTeam");
-  const members = useRows<{
-    event_id: string;
-    team_id: string;
-    fencer_id: string;
-  }>("tEventTeamFencer");
-  const [eventId, setEventId] = useState("");
-  const a = useAction(async () => {
-    await Promise.all([links.reload(), members.reload()]);
-  });
-  const linked = links.data.some(
-    (l) => l.event_id === eventId && l.team_id === team.id,
-  );
-  return (
-    <>
-      <p>Event-specific roster. Global team membership is not inherited.</p>
-      <label>
-        Event
-        <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
-          <option value="">Choose event</option>
-          {events.data
-            .filter((e) => e.mode === team.mode && e.status !== "archived")
-            .map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-        </select>
-      </label>
-      {eventId && (
-        <>
-          {!linked ? (
-            <button
-              disabled={a.busy}
-              onClick={() =>
-                void a.run(async () => {
-                  const { error } = await db().from("tEventTeam").insert({
-                    event_id: eventId,
-                    team_id: team.id,
-                    owner_id: profile.id,
-                    mode: team.mode,
-                  });
-                  if (error) throw error;
-                })
-              }
-            >
-              Add team to event
-            </button>
-          ) : (
-            fencers.data
-              .filter((f) => !f.is_unregistered && !f.is_archived)
-              .map((f) => {
-                const exists = members.data.some(
-                  (m) =>
-                    m.event_id === eventId &&
-                    m.team_id === team.id &&
-                    m.fencer_id === f.id,
-                );
-                return (
-                  <label className="check" key={f.id}>
-                    <input
-                      type="checkbox"
-                      checked={exists}
-                      disabled={a.busy}
-                      onChange={() =>
-                        void a.run(async () => {
-                          const q = exists
-                            ? db()
-                                .from("tEventTeamFencer")
-                                .delete()
-                                .eq("event_id", eventId)
-                                .eq("team_id", team.id)
-                                .eq("fencer_id", f.id)
-                            : db().from("tEventTeamFencer").insert({
-                                event_id: eventId,
-                                team_id: team.id,
-                                fencer_id: f.id,
-                              });
-                          const { error } = await q;
-                          if (error) throw error;
-                        })
-                      }
-                    />
-                    {f.display_name}
-                  </label>
-                );
-              })
-          )}
-        </>
-      )}
-      <Notice
-        error={
-          events.error ||
-          fencers.error ||
-          links.error ||
-          members.error ||
-          a.status
-        }
-      />
     </>
   );
 }

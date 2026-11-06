@@ -1,3 +1,9 @@
+# Team instances and image library — PR #6 (prepared, not deployed)
+
+See [TEAM_IMAGES_RELEASE.md](TEAM_IMAGES_RELEASE.md) for the additive migration, immutable private image storage, trusted image endpoint with bundled WASM, legacy mapping and validation. Apply the reviewed server changes before merging the client; GitHub main auto-deploys. No hosted changes were made by this build.
+
+---
+
 # Management and match redesign — PR #5 (prepared, not deployed)
 
 This release requires `20261106204518_match_redesign.sql` BEFORE the new client. It preserves existing matches/calls and adds the operation ledger and new settings. The owner has already verified email invitation and password recovery in production; do not repeat obsolete SMTP activation steps from historical sections below.

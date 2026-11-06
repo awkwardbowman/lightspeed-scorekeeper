@@ -154,8 +154,8 @@ export const historyTiles: NavTile[] = [
 export const configurationTiles: NavTile[] = [
   {
     route: "/configuration/team-images",
-    title: "Team Images",
-    description: "Upload and assign team logos or photos.",
+    title: "Image Library",
+    description: "Upload optimized images and reuse team logos.",
     icon: "▧",
     status: "planned",
   },
@@ -195,7 +195,7 @@ export const titles: Record<Route, string> = {
   "/history/matches": "Match History",
   "/history/fencers": "Fencer History",
   "/configuration": "Configuration",
-  "/configuration/team-images": "Team Images",
+  "/configuration/team-images": "Image Library",
   "/configuration/key-mappings": "Key Mappings",
   "/configuration/general": "General Settings",
 };
