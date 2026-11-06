@@ -261,13 +261,18 @@ export function Fencers() {
         Duplicate names are allowed.
       </Intro>
       <Notice error={r.error} loading={r.loading} />
-      <div className="workspace-columns">
-        <section className="card">
+      <div className="workspace-columns fencer-workspace">
+        <section className="card fencer-browser" aria-label="Find a fencer">
           <Search value={search} onChange={setSearch} />
-          <ArchiveFilter checked={archived} onChange={setArchived} />
-          <button className="primary" onClick={() => select(null)}>
-            New fencer
-          </button>
+          <div className="fencer-browser-tools">
+            <label className="check">
+              <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+              Show archived
+            </label>
+            <button className="subtle" disabled={a.busy} onClick={() => select(null)}>
+              New fencer
+            </button>
+          </div>
           {r.data
             .filter(
               (f) =>
@@ -279,8 +284,10 @@ export function Fencers() {
             )
             .map((f) => (
               <button
-                className="list-item"
+                className={`list-item${selectedId === f.id ? " is-selected" : ""}`}
                 key={f.id}
+                aria-pressed={selectedId === f.id}
+                disabled={a.busy}
                 onClick={() => select(f)}
               >
                 <strong>
@@ -293,25 +300,30 @@ export function Fencers() {
               </button>
             ))}
         </section>
-        <section className="card">
+        <section className="card" aria-label="Fencer details">
+          <h3 className="fencer-editor-title">{selectedId ? "Edit fencer" : "New fencer"}</h3>
           <form
             className="editor"
             onSubmit={(e) => {
               e.preventDefault();
-              void a.run(() =>
-                write(
-                  "tFencer",
-                  {
-                    display_name: name.trim(),
-                    affiliation: club,
-                    notes,
-                    ...(!selected ? { owner_id: profile.id } : {}),
-                  },
-                  selected?.id,
-                ),
-              );
+              if (a.busy) return;
+              void a.run(async () => {
+                const values = { display_name: name.trim(), affiliation: club, notes };
+                if (selectedId) {
+                  await write("tFencer", values, selectedId);
+                } else {
+                  const { data, error } = await db().from("tFencer")
+                    .insert({ ...values, owner_id: profile.id }).select("id").single();
+                  if (error) throw error;
+                  setSelectedId(data.id);
+                }
+              });
             }}
           >
+            <label>
+              ID
+              <input className="fencer-id" readOnly value={selectedId || "NEW"} />
+            </label>
             <label>
               Display name
               <input
@@ -333,7 +345,7 @@ export function Fencers() {
               />
             </label>
             <button className="primary" disabled={a.busy}>
-              Save fencer
+              {selectedId ? "Save changes" : "Save new fencer"}
             </button>
           </form>
           {selected && (
