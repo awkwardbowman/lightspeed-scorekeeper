@@ -8,7 +8,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "node tests/database.test.mjs && node tests/tournament.test.mjs && node tests/account-endpoint.test.mjs && node tests/match-redesign.test.mjs && node tests/team-instances.test.mjs && node tests/image-assets.test.mjs",
-    "test:browser": "node tests/browser.test.mjs"
+    "test:browser": "node tests/browser.test.mjs",
+    "test:select": "node scripts/test-select.mjs",
+    "test:smoke": "node scripts/test-select.mjs --tier=smoke",
+    "test:changed": "node scripts/test-select.mjs --changed",
+    "test:integration": "node scripts/test-select.mjs --tier=integration",
+    "test:full": "node scripts/test-select.mjs --tier=full"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.119.0",
