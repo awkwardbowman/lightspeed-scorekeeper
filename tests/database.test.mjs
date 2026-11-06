@@ -79,8 +79,12 @@ await q('select public.set_event_status($1,\'completed\')',[empty]);const snapsh
 await db.query('update public."tConfiguration" set tiebreakers=\'["differential","points_for"]\'');assert.deepEqual((await q('select configuration from public."tEventFinalization" where event_id=$1',[empty]))[0].configuration,snapshot,'frozen config remains unchanged');
 await reject('update public."tConfiguration" set key_mappings=\'{"toggle":"a","undo":"a"}\'',[],/unique single/);
 await root();await db.query('delete from auth.sessions where user_id=$1',[other]);await auth(other);assert.equal((await q('select public.account_status() p'))[0].p,null,'revoked sessions blocked');
+await auth(manager);await reject('select public.reserve_invitation($1)',['not-ready@test.invalid'],/not configured/);
+await reject('update public."tAccountPolicy" set email_ready=true',[],/permission denied/);
 await root();await db.query('update public."tAccountPolicy" set email_ready=true');
 await auth(manager);await q('select public.reserve_invitation($1)',['new-person@test.invalid']);
+await reject('select public.reserve_invitation($1)',['NEW-PERSON@test.invalid'],/duplicate key/);
+await reject('select public.reserve_invitation($1)',['not-an-email'],/valid email/);
 await reject('select public.set_invitations_paused(true)',[],/Only Admin/);
 await reject('update public."tAccountPolicy" set invitations_paused=false',[],/permission denied/);
 await auth(admin);await q('select public.set_invitations_paused(true)');

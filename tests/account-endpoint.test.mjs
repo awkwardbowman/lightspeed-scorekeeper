@@ -13,7 +13,11 @@ const source = (
 const { code } = await transform(source, { loader: "ts", format: "esm" });
 async function request(
   body,
-  { role = "management", active = true, reserveError = null } = {},
+  {
+    role = "management", active = true, reserveError = null,
+    signedIn = true, revoked = false, mustChangePassword = false,
+    mailError = null, passwordAccepted = true,
+  } = {},
 ) {
   let handler;
   const events = [];
@@ -26,7 +30,7 @@ async function request(
       admin: {
         inviteUserByEmail: async (email) => {
           record("mail", email);
-          return { data: { user: { id: "invited" } }, error: null };
+          return { data: { user: mailError ? null : { id: "invited" } }, error: mailError };
         },
         updateUserById: async (...args) => record("admin-update", args),
       },
@@ -51,7 +55,7 @@ async function request(
   const caller = {
     auth: {
       getUser: async () => ({
-        data: { user: { id: "self", email: "self@test.invalid" } },
+        data: { user: signedIn ? { id: "self", email: "self@test.invalid" } : null },
         error: null,
       }),
       updateUser: async (value) => record("self-password", value),
@@ -59,12 +63,12 @@ async function request(
     rpc: async (name) =>
       name === "account_status"
         ? {
-            data: {
+            data: revoked ? null : {
               id: "self",
               app_role: role,
               is_active: active,
               is_deleted: false,
-              must_change_password: false,
+              must_change_password: mustChangePassword,
             },
             error: null,
           }
@@ -78,7 +82,7 @@ async function request(
       assert.equal(url, "test-runtime/auth/v1/user");
       assert.equal(options.headers.Authorization, "Bearer test");
       record("self-password", JSON.parse(options.body));
-      return { ok: true };
+      return { ok: passwordAccepted };
     },
   );
   const res = await handler(
@@ -138,6 +142,34 @@ const disabled = await request(
 );
 assert.equal(disabled.status, 403);
 assert.equal(disabled.events.length, 0);
+for (const [options, status] of [
+  [{ signedIn: false }, 401],
+  [{ revoked: true }, 403],
+  [{ mustChangePassword: true }, 403],
+]) {
+  const result = await request({ action: "invite", email: "new@test.invalid" }, options);
+  assert.equal(result.status, status);
+  assert.equal(result.events.length, 0, "denied caller cannot send mail or write accounts");
+}
+const failedMail = await request(
+  { action: "invite", email: "new@test.invalid" },
+  { mailError: { message: "SMTP unavailable" } },
+);
+assert.equal(failedMail.status, 400);
+assert.ok(failedMail.events.some(e => e.name === "update:tInvitation" && e.value.status === "failed"));
+assert.ok(!failedMail.events.some(e => e.name === "insert:tUser"), "failed delivery must not provision app access");
+const failedPassword = await request(
+  { action: "password", password: "a-new-self-password" },
+  { mustChangePassword: true, passwordAccepted: false },
+);
+assert.equal(failedPassword.status, 400);
+assert.ok(!failedPassword.events.some(e => e.name === "update:tUser"), "rejected password must not clear first-password gate");
+const firstPassword = await request(
+  { action: "password", password: "a-new-self-password" },
+  { mustChangePassword: true },
+);
+assert.equal(firstPassword.status, 200);
+assert.ok(firstPassword.events.some(e => e.name === "update:tUser" && e.value.must_change_password === false));
 console.log(
-  "PASS: manager/Admin invitations, forced Management role, paused/disabled denial, and self-only password changes with legacy resets denied.",
+  "PASS: manager/Admin invitations, forced Management role, caller/session/password gates, failed delivery, and self-only password changes with legacy resets denied.",
 );
