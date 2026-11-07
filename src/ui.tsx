@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { db, message, rows } from "./data";
+import { db, message, rows, type Fencer } from "./data";
 export function useRows<T>(table: string, enabled = true) {
   const [data, setData] = useState<T[]>([]);
   const [error, setError] = useState("");
@@ -161,6 +161,17 @@ export function DeleteButton({
       <Notice error={a.error} success={a.status} />
     </>
   );
+}
+/** Display a human-readable competitor disambiguator without exposing IDs. */
+export function competitorLabel(fencer: Fencer, pool: Fencer[]): string {
+  const label = fencer.display_name + (fencer.affiliation ? ` · ${fencer.affiliation}` : "");
+  const duplicates = pool.filter((f) =>
+    f.display_name.trim().toLocaleLowerCase() === fencer.display_name.trim().toLocaleLowerCase() &&
+    f.affiliation.trim().toLocaleLowerCase() === fencer.affiliation.trim().toLocaleLowerCase(),
+  ).sort((a, b) => a.id.localeCompare(b.id));
+  return duplicates.length > 1
+    ? `${label} · Entry ${duplicates.findIndex((f) => f.id === fencer.id) + 1}`
+    : label;
 }
 /** Readable before/after audit summary; relationship resolvers avoid exposing UUIDs. */
 export function describeChanges(
