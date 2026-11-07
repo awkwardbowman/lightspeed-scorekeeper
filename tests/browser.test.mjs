@@ -447,6 +447,16 @@ try {
     { id: admin, session: sessions.get(admin) },
   );
   if (!process.env.TEAM_ONLY) {
+    // The shared RecordPage lookup powers Users, Fencers, Presets and Events.
+    const assertIdFirst = async () => {
+      await page.getByRole("columnheader", { name: "ID", exact: true }).waitFor();
+      assert.deepEqual(
+        await page.locator("table thead th").allTextContents()
+          .then((labels) => labels.slice(0, 2).map((label) => label.trim())),
+        ["ID", "Name"],
+        "Management lookup must show ID before Name",
+      );
+    };
     await page.goto("http://127.0.0.1:5187/#/fencers");
     await page.getByRole("link", { name: "New fencer", exact: true }).click();
     await page
@@ -462,6 +472,7 @@ try {
     await page
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
+    await assertIdFirst();
     // Notes stay in the editor/database, not in the Fencer lookup table.
     assert.equal(
       await page.getByRole("columnheader", { name: "Affiliation", exact: true }).count(),
@@ -543,6 +554,7 @@ try {
       ["events", "event"],
     ]) {
       await page.goto(`http://127.0.0.1:5187/#/${route}`);
+      await assertIdFirst();
       await page
         .getByRole("link", { name: `New ${entity}`, exact: true })
         .click();
@@ -567,6 +579,7 @@ try {
         .waitFor();
     }
     await page.goto("http://127.0.0.1:5187/#/users");
+    await assertIdFirst();
     await page.getByRole("link", { name: "New user", exact: true }).click();
     await page
       .getByRole("heading", { name: "Invite user", exact: true })
