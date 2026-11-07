@@ -4,6 +4,7 @@ import {
   type EventRecord,
   type Fencer,
   type ImageAsset,
+  type Profile,
   type TeamInstance,
   type TeamMember,
 } from "./data";
@@ -616,6 +617,7 @@ function Roster({
 }) {
   const members = useRows<TeamMember>("tTeamMember"),
     fencers = useRows<Fencer>("tFencer"),
+    users = useRows<Profile>("tUser"),
     command = useTeamCommand(),
     [asOf, setAsOf] = useState(""),
     [search, setSearch] = useState("");
@@ -722,15 +724,15 @@ function Roster({
           .map((m) => (
             <li key={m.id}>
               {fencers.data.find((f) => f.id === m.fencer_id)?.display_name ?? "Unavailable fencer"}
-              : added {m.added_at} by {m.added_by ?? "legacy import"}
+              : added {new Date(m.added_at).toLocaleString(undefined, { timeZone: "UTC", timeZoneName: "short" })} by {users.data.find((u) => u.id === m.added_by)?.display_name ?? (m.added_by ? "Former staff member" : "Legacy import")}
               {m.removed_at
-                ? `; removed ${m.removed_at} by ${m.removed_by}`
+                ? `; removed ${new Date(m.removed_at).toLocaleString(undefined, { timeZone: "UTC", timeZoneName: "short" })} by ${users.data.find((u) => u.id === m.removed_by)?.display_name ?? "Former staff member"}`
                 : ""}
             </li>
           ))}
       </ul>
       <Notice
-        error={members.error || fencers.error || a.error}
+        error={members.error || fencers.error || users.error || a.error}
         success={a.status}
         loading={members.loading || fencers.loading}
       />
@@ -758,6 +760,7 @@ function TeamHistory({
     old_value: unknown;
     new_value: unknown;
   }>("tAudit");
+  const users = useRows<Profile>("tUser");
   const instances = teams.filter(
     (t) => t.team_identity_id === team.team_identity_id,
   );
@@ -782,7 +785,7 @@ function TeamHistory({
           <a href={teamHref("roster", t.id)}>Current and historical roster</a>
         </article>
       ))}
-      <h4>Instance changes (UTC)</h4>
+      <h4>Instance changes</h4>
       {audits.data
         .filter(
           (a) =>
@@ -793,9 +796,13 @@ function TeamHistory({
         .map((a) => (
           <details key={a.id}>
             <summary>
-              {a.action} · {new Date(a.recorded_at).toLocaleString()} · Audit record
+              {a.action} · {new Date(a.recorded_at).toLocaleString()} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? (a.actor_id ? "Former staff member" : "System")}
             </summary>
-            <p>{describeChanges(a.old_value, a.new_value)}</p>
+            <p>{describeChanges(a.old_value, a.new_value, (key, value) =>
+              key === "event_id" ? events.find((e) => e.id === value)?.name ?? (value ? "Earlier event" : "Unassigned") :
+              key === "logo_image_asset_id" ? assets.find((x) => x.id === value)?.display_name ?? (value ? "Earlier image" : "None") :
+              undefined
+            )}</p>
           </details>
         ))}
       <Notice error={audits.error} />
@@ -809,6 +816,11 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
     a = useAction(teams.reload),
     [search, setSearch] = useState(""),
     [registrationFilter, setRegistrationFilter] = useState("all");
+  const normalizedSearch = search.trim().toLowerCase();
+  const registered = teams.data.filter((t) => t.event_id === event.id && t.name.toLowerCase().includes(normalizedSearch));
+  const available = teams.data.filter((t) =>
+    !t.event_id && !t.is_archived && t.mode === event.mode &&
+    t.name.toLowerCase().includes(normalizedSearch));
   const eligible =
     event.competition_format === "team" &&
     ["draft", "active"].includes(event.status);
@@ -831,12 +843,16 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
           <option value="unregistered">Unregistered</option>
         </select>
       </label>
-      {registrationFilter !== "unregistered" && <h4>Registered teams</h4>}
-      {teams.data
-        .filter((t) => registrationFilter !== "unregistered" && t.event_id === event.id)
-        .map((t) => (
+      <label>
+        Search teams
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search registered and available teams" />
+      </label>
+      <p role="status">Showing {registrationFilter === "registered" ? registered.length : registrationFilter === "unregistered" ? available.length : registered.length + (eligible ? available.length : 0)} matching teams</p>
+      {registrationFilter !== "unregistered" && <h4>Registered teams ({registered.length})</h4>}
+      {registrationFilter !== "unregistered" && registered.map((t) => (
           <article className="card" key={t.id}>
             <TeamBadge team={t} assets={assets.data} />
+            {t.is_archived && <p className="muted">Archived · still assigned to this event</p>}
             <div className="button-row">
               <a href={teamHref("roster", t.id, event.id)}>Edit roster</a>
               <a href={teamHref("edit", t.id, event.id)}>Edit team</a>
@@ -859,24 +875,8 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
         ))}
       {eligible && registrationFilter !== "registered" && (
         <>
-          <h4>Available unregistered teams</h4>
-          <label>
-            Search unassigned teams
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          {teams.data
-            .filter(
-              (t) =>
-                !t.event_id &&
-                !t.is_archived &&
-                t.mode === event.mode &&
-                t.name.toLowerCase().includes(search.toLowerCase()),
-            )
-            .map((t) => (
+          <h4>Available unregistered teams ({available.length})</h4>
+          {available.map((t) => (
               <article className="card" key={t.id}>
                 <TeamBadge team={t} assets={assets.data} />
                 <button
@@ -893,6 +893,9 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
             ))}
         </>
       )}
+      {!teams.loading && (registrationFilter === "registered" ? !registered.length :
+        registrationFilter === "unregistered" ? !available.length : !registered.length && (!eligible || !available.length)) &&
+        <p role="status">No teams match this search and registration filter. Teams assigned to another event must be cloned before they can be assigned here.</p>}
       <Notice
         error={teams.error || assets.error || a.error}
         success={a.status}
