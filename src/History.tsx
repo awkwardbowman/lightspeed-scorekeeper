@@ -15,6 +15,7 @@ import { EventPicker, StandingsTable } from "./Events";
 import {
   ArchiveFilter,
   BackLink,
+  describeChanges,
   Intro,
   Notice,
   Search,
@@ -545,7 +546,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 <summary>
                   {new Date(a.recorded_at).toLocaleString()} · {a.action} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"}
                 </summary>
-                <p>Correction details remain available in the retained audit evidence.</p>
+                <p>{describeChanges(a.old_value, a.new_value)}</p>
               </details>
             ))}
         </section>
