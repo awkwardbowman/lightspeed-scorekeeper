@@ -8,7 +8,7 @@ import {
   type Configuration,
 } from "./data";
 import { claim } from "./db/traditional";
-import { useRows, Notice, downloadJson } from "./ui";
+import { useRows, Notice } from "./ui";
 import { clockText, uid } from "./match";
 import {
   command,
@@ -563,9 +563,6 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
                 onEdit={() => void showManage()}
                 onBack={() => setView("live")}
                 onNew={() => void newMatch()}
-                onExport={() =>
-                  downloadJson(`match-${match.id}.json`, { match, operations })
-                }
                 onCsv={() => exportCsv(match, operations)}
               />
             ) : null}
