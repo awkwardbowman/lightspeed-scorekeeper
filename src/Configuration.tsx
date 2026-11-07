@@ -221,7 +221,7 @@ export default function Configuration({
             </button>
           </>
         )}
-        <Notice error={a.status} />
+        <Notice error={a.error} success={a.status} />
       </section>
       <ConfigurationAudit />
     </>
