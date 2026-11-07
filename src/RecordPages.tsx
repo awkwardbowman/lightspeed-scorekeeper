@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAccount } from "./Auth";
 import { manage, rpc, write, type EventRecord, type Preset } from "./data";
-import { Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
+import { BackLink, Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
 import { EventTeamAssignments } from "./Teams";
 import { CopyId } from "./Images";
-import { Registration } from "./Events";
+import { EventStatus, Registration } from "./Events";
 
 type Entity = "fencers" | "presets" | "users" | "events" | "teams";
 type Row = { id: string; [key: string]: unknown };
@@ -144,6 +144,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const { profile } = useAccount();
   const r = useRows<Row>(def.table);
   const presets = useRows<Preset>("tMatchPreset");
+  const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
+  const eventTeams = useRows<{ id: string; event_id: string | null; is_archived: boolean }>("vTeamInstances");
   const [params, setParams] = useState(query);
   useEffect(() => {
     const change = () => setParams(query());
@@ -175,6 +177,11 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const href = (mode: string, id?: string) =>
     `#${base}?mode=${mode}${id ? `&id=${encodeURIComponent(id)}` : ""}`;
   const name = (x: Row) => String(x.display_name ?? x.name ?? "");
+  const eventCount = (x: Row) =>
+    x.competition_format === "team"
+      ? new Set(eventTeams.data.filter((t) => t.event_id === x.id && !t.is_archived).map((t) => t.id)).size
+      : new Set(eventRegistrations.data.filter((f) => f.event_id === x.id).map((f) => f.fencer_id)).size;
+  const eventCountLoading = eventRegistrations.loading || eventTeams.loading;
   const inactive = (x: Row) =>
     entity === "users"
       ? !x.is_active
@@ -191,7 +198,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
         .includes(affiliation.trim().toLowerCase())) &&
     (entity === "fencers"
       ? name(x).toLowerCase().includes(search.trim().toLowerCase())
-      : `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
+      : `${name(x)} ${x.email ?? ""} ${x.affiliation ?? ""}`
           .toLowerCase()
           .includes(search.toLowerCase()));
   const totalCount = r.data.filter(allowed).length;
@@ -214,6 +221,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const mayEdit = (x?: Row) =>
     entity !== "users" ||
     (profile.app_role === "admin" && x?.app_role !== "admin" && !x?.is_deleted);
+  const backHref = mode === "relationships" && params.get("return") === "detail"
+    ? href("detail", id)
+    : `#${base}`;
   const title =
     mode === "delete"
       ? "Confirm delete user access"
@@ -235,7 +245,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
   return (
     <>
       <Intro title={titleCase(title)} />
-      <Notice error={r.error || presets.error} loading={r.loading} />
+      {(mode === "relationships" || mode === "detail") && <BackLink href={backHref} />}
+      <Notice error={r.error || presets.error || (entity === "events" ? eventRegistrations.error || eventTeams.error : "")} loading={r.loading} />
       {notice && (
         <p role="status" className="notice-feedback notice-success">
           {notice}
@@ -248,8 +259,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
               New {titleCase(def.name)}
             </a>
             {entity === "events" && <a href="#/events/teams">Manage teams</a>}
+            {entity === "users" && <InvitationPolicy />}
           </div>
-          {entity === "users" && <InvitationPolicy />}
           <div className="fields">
             <label>
               {entity === "fencers" ? "Name" : "Search"}
@@ -319,6 +330,14 @@ export function RecordPage({ entity }: { entity: Entity }) {
                       <th>Email</th>
                       <th>Role</th>
                     </>
+                  ) : entity === "events" ? (
+                    <>
+                      <th>Scoring Mode</th>
+                      <th>Competition Format</th>
+                      <th>Start Date</th>
+                      <th>End Date</th>
+                      <th>Registered Fencers / Teams</th>
+                    </>
                   ) : (
                     <th>{entity === "fencers" ? "Affiliation" : "Details"}</th>
                   )}
@@ -364,26 +383,30 @@ export function RecordPage({ entity }: { entity: Entity }) {
                             )}
                           </td>
                         </>
+                      ) : entity === "events" ? (
+                        <>
+                          <td>{displayScoringMode(x.mode)}</td>
+                          <td>{displayCompetitionFormat(x.competition_format)}</td>
+                          <td>{displayDate(x.start_date)}</td>
+                          <td>{displayDate(x.end_date)}</td>
+                          <td>{eventCountLoading ? "Loading…" : `${eventCount(x)} ${x.competition_format === "team" ? "teams" : "fencers"}`}</td>
+                        </>
                       ) : (
                         <td>
-                          {entity === "fencers"
-                            ? String(x.affiliation ?? "")
-                            : String(x.mode ?? "")}
+                          {entity === "fencers" ? String(x.affiliation ?? "") : String(x.mode ?? "")}
                           {entity === "presets" &&
                             ` · ${x.match_type === "knockout" ? "Knockout" : "Standard"} · ${Number(x.duration_ms) / 1000}s · ${x.target_score ?? "No Target"}`}
-                          {entity === "events" &&
-                            ` · ${x.competition_format} · ${displayDate(x.start_date)} – ${displayDate(x.end_date)}`}
                         </td>
                       )}
                       <td>
-                        {String(
+                        {titleCase(String(
                           x.status ??
                             (inactive(x)
                               ? entity === "users"
                                 ? "Disabled"
                                 : "Archived"
                               : "Active"),
-                        )}
+                        ))}
                       </td>
                       <td>
                         <div className="button-row">
@@ -411,6 +434,11 @@ export function RecordPage({ entity }: { entity: Entity }) {
                                 : "Registrations"}
                             </a>
                           )}
+                          {entity === "events" && (
+                            <a href="#/run-event?from=events" onClick={() => sessionStorage.setItem("event", x.id)}>
+                              Run Event
+                            </a>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -428,9 +456,6 @@ export function RecordPage({ entity }: { entity: Entity }) {
         </section>
       ) : mode === "create" || selected ? (
         <section className="card">
-          {(mode === "relationships" || mode === "detail") && (
-            <a href={`#${base}`}>← Back to lookup</a>
-          )}
           {mode === "create" || mode === "edit" ? (
             <RecordForm
               key={`${entity}:${mode}:${id}`}
@@ -462,7 +487,6 @@ export function RecordPage({ entity }: { entity: Entity }) {
           ) : mode === "archive" || mode === "restore" ? (
             <>
               <h3>{selected && name(selected)}</h3>
-              <p>ID: {id}</p>
               <p>
                 {mode === "archive"
                   ? "This record will no longer be available in active selections. Historical matches, attribution and audit records will be preserved."
@@ -540,33 +564,12 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 <a className="secondary" href={href("edit", id)}>
                   Edit Event
                 </a>
-                <a className="secondary" href={href("relationships", id)}>
+                <a className="secondary" href={href("relationships", id) + "&return=detail"}>
                   {selected.competition_format === "team"
                     ? "Team Assignments"
                     : "Registrations"}
                 </a>
-                {selected.mode === "traditional" &&
-                  selected.competition_format === "individual" &&
-                  [
-                    ["/run-event", "Phases and Groups"],
-                    ["/run-event/bracket", "Bracket"],
-                    ["/run-event/matches", "Matches"],
-                    ["/run-event/standings", "Standings"],
-                  ].map(([route, label]) => (
-                    <a
-                      className="secondary"
-                      key={route}
-                      href={`#${route}`}
-                      onClick={() => sessionStorage.setItem("event", id)}
-                    >
-                      {label}
-                    </a>
-                  ))}
               </nav>
-              <EventStatus
-                event={selected as unknown as EventRecord}
-                onDone={r.reload}
-              />
             </section>
           ) : mode === "relationships" && selected ? (
             <>
@@ -580,16 +583,6 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   ) : (
                     <Registration eventId={id} />
                   )}
-                  <EventStatus
-                    event={selected as unknown as EventRecord}
-                    onDone={r.reload}
-                  />
-                  <a
-                    href="#/run-event"
-                    onClick={() => sessionStorage.setItem("event", id)}
-                  >
-                    Run event
-                  </a>
                 </>
               ) : (
                 <a href="#/events/teams">Manage team instances and rosters</a>
@@ -687,10 +680,6 @@ function RecordForm({
         void onSave(v);
       }}
     >
-      <label>
-        Record ID
-        <input readOnly value={selected?.id ?? "NEW"} />
-      </label>
       {def.fields.map((field) => {
         const f =
           field.key === "preset_id"
@@ -844,44 +833,6 @@ function InvitationPolicy() {
     </>
   );
 }
-function EventStatus({
-  event,
-  onDone,
-}: {
-  event: EventRecord;
-  onDone: () => Promise<void>;
-}) {
-  const a = useAction(onDone);
-  return (
-    <>
-      <h3>Event status: {event.status}</h3>
-      <div className="button-row">
-        {["draft", "active", "completed"]
-          .filter((s) => s !== event.status)
-          .map((s) => (
-            <button
-              key={s}
-              disabled={a.busy}
-              onClick={() => {
-                if (
-                  confirm(
-                    `Change ${event.name} to ${s}? Completing freezes standings; reopening preserves prior versions.`,
-                  )
-                )
-                  void a.run(() =>
-                    rpc("set_event_status", { p_event: event.id, p_status: s }),
-                  );
-              }}
-            >
-              {s === "active" && event.status === "completed" ? "Reopen" : s}
-            </button>
-          ))}
-      </div>
-      <Notice error={a.error} success={a.status} />
-    </>
-  );
-}
-
 function DeleteUserAccess({
   user,
   busy,
@@ -930,4 +881,11 @@ function displayDate(value: unknown) {
   if (!value) return "Unscheduled";
   const [year, month, day] = String(value).split("-").map(Number);
   return new Date(year, month - 1, day).toLocaleDateString();
+}
+
+function displayScoringMode(value: unknown) {
+  return value === "traditional" ? "Traditional" : value === "control_point" ? "Control Point" : titleCase(String(value ?? "Unknown"));
+}
+function displayCompetitionFormat(value: unknown) {
+  return value === "individual" ? "Individual" : value === "team" ? "Team" : titleCase(String(value ?? "Unknown"));
 }
