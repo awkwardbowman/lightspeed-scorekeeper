@@ -473,6 +473,7 @@ try {
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
     await assertIdFirst();
+    await page.locator(".notice-success").filter({ hasText: "Saved successfully." }).waitFor();
     // Fencer lookup filters are independent Name + Affiliation searches,
     // followed by Status and Sort. Other entity lookups retain broad Search.
     assert.deepEqual(
@@ -503,8 +504,11 @@ try {
     await page.getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" });
     await page.getByRole("status").filter({ hasText: "No records match your filters." }).waitFor();
-    await affiliationFilter.fill("");
-    await nameFilter.fill("");
+    await page.getByRole("status").filter({ hasText: "Showing 0 of" }).waitFor();
+    await page.getByRole("button", { name: "Clear Filters", exact: true }).click();
+    assert.equal(await nameFilter.inputValue(), "");
+    assert.equal(await affiliationFilter.inputValue(), "");
+    assert.equal(await page.getByRole("button", { name: "Clear Filters" }).count(), 0);
     await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
     // Notes stay in the editor/database, not in the Fencer lookup table.
     assert.equal(
@@ -623,7 +627,7 @@ try {
       .filter({ has: page.getByRole("cell", { name: `${manager}@test.invalid`, exact: true }) });
     await managerRow.waitFor();
     assert.equal(await managerRow.locator("td").nth(2).innerText(), `${manager}@test.invalid`);
-    assert.equal(await managerRow.locator("td").nth(3).innerText(), "management",
+    assert.equal(await managerRow.locator("td").nth(3).innerText(), "Management",
       "Role must not be concatenated into the Email cell");
     await page.getByRole("link", { name: "New user", exact: true }).click();
     await page
@@ -856,6 +860,12 @@ try {
   });
   await page.getByAltText("Processed image preview", { exact: true }).waitFor();
   await page.getByText(/512 × 256 px/).waitFor();
+  await page.getByRole("combobox", { name: "Maximum size" }).selectOption("256");
+  await page.getByText(/256 × 128 px/).waitFor();
+  await page.getByRole("combobox", { name: "Quality" }).selectOption("0.9");
+  await page.getByText("Preview automatically updated.").waitFor();
+  assert.equal(await page.getByRole("button", { name: "Update preview" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Approve preview and upload" }).isEnabled(), true);
   assert.equal(
     (await q('select count(*)::int n from public."tImageAsset"'))[0].n,
     0,
@@ -869,6 +879,7 @@ try {
     .getByRole("alert")
     .filter({ hasText: /Failed to send|fetch|request/i })
     .waitFor();
+  await page.locator(".notice-error").filter({ hasText: /Failed to send|fetch|request/i }).waitFor();
   await page.getByAltText("Processed image preview", { exact: true }).waitFor();
   await page
     .getByRole("button", { name: "Approve preview and upload", exact: true })
