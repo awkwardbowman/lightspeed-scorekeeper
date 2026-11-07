@@ -810,11 +810,6 @@ function InvitationPolicy() {
   const a = useAction(p.reload);
   return (
     <>
-      <p>
-        {p.data[0]?.invitations_paused
-          ? "Invitations are paused."
-          : "Invite managers by email. Each person sets their own password."}
-      </p>
       {profile.app_role === "admin" && (
         <button
           disabled={a.busy || !p.data[0]}
@@ -829,6 +824,11 @@ function InvitationPolicy() {
           {p.data[0]?.invitations_paused ? "Resume" : "Pause"} invitations
         </button>
       )}
+      <span className="muted">
+        {p.data[0]?.invitations_paused
+          ? "Invitations are paused."
+          : "Managers are invited by email."}
+      </span>
       <Notice error={p.error || a.error} success={a.status} />
     </>
   );
