@@ -801,6 +801,8 @@ try {
     await page.goto("http://127.0.0.1:5187/#/single-match");
     await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
     await page.goto("http://127.0.0.1:5187/#/history/matches");
+    await page.getByRole("combobox", { name: "Match order" }).selectOption("oldest");
+    await page.getByRole("combobox", { name: "Match order" }).selectOption("newest");
     const savedHistoryRow = page.getByRole("button")
       .filter({ hasText: "Ari Wins" });
     await savedHistoryRow.waitFor();
