@@ -75,6 +75,7 @@ export interface Fencer {
   is_unregistered: boolean;
 }
 export interface Preset {
+  match_type: "standard" | "knockout";
   id: string;
   name: string;
   duration_ms: number;
@@ -90,6 +91,8 @@ export interface EventRecord {
   status: string;
   preset_id: string | null;
   description: string;
+  start_date: string | null;
+  end_date: string | null;
   starts_at: string | null;
   ends_at: string | null;
 }

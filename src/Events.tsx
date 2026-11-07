@@ -41,6 +41,10 @@ export function EventPicker({
         <option value="">Select an event</option>
         {events
           .filter((e) => archived || e.status !== "archived")
+          .sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+            a.id.localeCompare(b.id),
+          )
           .map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} · {e.status}
@@ -100,6 +104,10 @@ export function Registration({ eventId }: { eventId: string }) {
               !f.is_archived &&
               f.display_name.toLowerCase().includes(search.toLowerCase()),
           )
+          .sort((a, b) =>
+            a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+            a.id.localeCompare(b.id),
+          )
           .map((f) => {
             const exists = r.data.some(
               (x) => x.event_id === eventId && x.fencer_id === f.id,
@@ -131,7 +139,7 @@ export function Registration({ eventId }: { eventId: string }) {
             );
           })}
       </div>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </section>
   );
 }
@@ -620,7 +628,7 @@ export function RunEvent() {
                   Schedule match
                 </button>
               </div>
-              <Notice error={a.status} />
+              <Notice error={a.error} success={a.status} />
             </section>
             <section className="card">
               <h3>Matches & bracket generations</h3>
@@ -711,8 +719,9 @@ export function RunEvent() {
                           </button>
                           {!m.is_archived && !m.is_void && (
                             <button
-                              className="subtle"
+                              className="danger"
                               disabled={a.busy}
+                              aria-label={`Void match: ${m.current_left_name} vs ${m.current_right_name}`}
                               onClick={() => void voidMatch(m.id)}
                             >
                               Void

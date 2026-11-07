@@ -75,9 +75,16 @@ export function operationLabel(o: Operation) {
     return `${o.data.side} +${o.data.points} ${o.data.type}`;
   if (o.kind === "penalty")
     return `${o.data.card} card on ${o.data.side} · ${o.data.reason} → ${o.data.creditedSide} +${o.data.points}`;
-  if (o.kind === "admin")
-    return `Admin override · left ${signed(o.left_delta)}, right ${signed(o.right_delta)}`;
-  if (o.kind === "reverse") return `Reversal of ${o.data.operationId}`;
+  if (o.kind === "admin") {
+    if (o.data.outcome)
+      return `Official outcome: ${o.data.outcome === "draw" ? "Tie" : o.data.outcome}`;
+    if (o.left_delta || o.right_delta)
+      return `Score correction · left ${signed(o.left_delta)}, right ${signed(o.right_delta)}`;
+    if ("remainingMs" in o.data) return "Timer correction";
+    if ("targetScore" in o.data) return "Score to Win correction";
+    return "Match settings correction";
+  }
+  if (o.kind === "reverse") return "Scoring reversal";
   return o.kind;
 }
 export function signed(n: number) {

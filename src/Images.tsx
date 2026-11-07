@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { db, rpc, type ImageAsset } from "./data";
+import { db, message, rpc, type ImageAsset, type Profile } from "./data";
 import { Intro, Notice, useAction, useRows } from "./ui";
 import { processImage, type ProcessedImage } from "./imageProcessing";
 
@@ -99,22 +99,54 @@ export function UploadImage({
     [name, setName] = useState(""),
     [quality, setQuality] = useState(0.82),
     [bound, setBound] = useState(512);
-  const [processed, setProcessed] = useState<ProcessedImage>(),
+  const [prepared, setPrepared] = useState<{
+      image: ProcessedImage;
+      file: File;
+      quality: number;
+      bound: number;
+    }>(),
+    [processing, setProcessing] = useState(false),
+    [processingError, setProcessingError] = useState(""),
     [uploadId, setUploadId] = useState(() => crypto.randomUUID());
-  const a = useAction(),
-    preview = useBlobUrl(processed?.blob);
+  const a = useAction();
+  // Never allow uploading a preview created with a previous file or setting.
+  const processed =
+    prepared &&
+    prepared.file === file &&
+    prepared.quality === quality &&
+    prepared.bound === bound
+      ? prepared.image
+      : undefined;
+  const preview = useBlobUrl(processed?.blob);
   const sequence = useRef(0);
-  async function prepare(next: File, q = quality, b = bound) {
+  useEffect(() => {
     const seq = ++sequence.current;
-    setProcessed(undefined);
-    await a.run(async () => {
-      const result = await processImage(next, b, q);
-      if (seq === sequence.current) {
-        setProcessed(result);
-        setUploadId(crypto.randomUUID());
-      }
-    });
-  }
+    setProcessing(Boolean(file));
+    setProcessingError("");
+    if (!file) {
+      setPrepared(undefined);
+      return;
+    }
+    // Group rapid setting changes so only the latest optimization is used.
+    const timer = window.setTimeout(() => {
+      void processImage(file, bound, quality)
+        .then((image) => {
+          if (seq !== sequence.current) return;
+          setPrepared({ image, file, bound, quality });
+          setUploadId(crypto.randomUUID());
+        })
+        .catch((error) => {
+          if (seq === sequence.current) setProcessingError(message(error));
+        })
+        .finally(() => {
+          if (seq === sequence.current) setProcessing(false);
+        });
+    }, 120);
+    return () => {
+      ++sequence.current;
+      window.clearTimeout(timer);
+    };
+  }, [file, bound, quality]);
   return (
     <fieldset disabled={a.busy} className="image-upload">
       <legend>Upload new image</legend>
@@ -141,7 +173,6 @@ export function UploadImage({
             if (f) {
               setFile(f);
               setName(f.name.replace(/\.[^.]+$/, ""));
-              void prepare(f);
             }
           }}
         />
@@ -151,10 +182,7 @@ export function UploadImage({
           Maximum size
           <select
             value={bound}
-            onChange={(e) => {
-              setBound(Number(e.target.value));
-              setProcessed(undefined);
-            }}
+            onChange={(e) => setBound(Number(e.target.value))}
           >
             {[512, 384, 256].map((n) => (
               <option key={n} value={n}>
@@ -167,10 +195,7 @@ export function UploadImage({
           Quality
           <select
             value={quality}
-            onChange={(e) => {
-              setQuality(Number(e.target.value));
-              setProcessed(undefined);
-            }}
+            onChange={(e) => setQuality(Number(e.target.value))}
           >
             {[0.7, 0.82, 0.9].map((n) => (
               <option key={n} value={n}>
@@ -179,13 +204,15 @@ export function UploadImage({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          disabled={!file}
-          onClick={() => file && void prepare(file)}
-        >
-          Update preview
-        </button>
+        <p role="status" className="image-preview-status">
+          {processing
+            ? "Optimizing image…"
+            : processed
+              ? "Preview automatically updated."
+              : file
+                ? "Preview unavailable. Choose another image or setting."
+                : "Choose an image to see its optimized preview."}
+        </p>
       </div>
       {processed && (
         <>
@@ -204,7 +231,7 @@ export function UploadImage({
         <button
           type="button"
           className="primary"
-          disabled={!processed || !name.trim()}
+          disabled={a.busy || processing || !processed || !name.trim()}
           onClick={() =>
             void a.run(async () => {
               const { data, error } = await db().functions.invoke(
@@ -232,7 +259,7 @@ export function UploadImage({
           Cancel upload
         </button>
       </div>
-      <Notice error={a.status === "Saved." ? "" : a.status} />
+      <Notice error={processingError || a.error} success={a.status} />
     </fieldset>
   );
 }
@@ -272,6 +299,8 @@ export function ImagePicker({
             assets={assets.data.filter(
               (x) => !x.is_archived || x.id === selected,
             )}
+            loading={assets.loading}
+            loadError={assets.error}
             onSelect={(x) => onSelect(x.id)}
           />
           <Notice error={assets.error} loading={assets.loading} />
@@ -284,19 +313,33 @@ function AssetGallery({
   assets,
   onSelect,
   onArchive,
+  loading = false,
+  loadError = "",
 }: {
   assets: ImageAsset[];
   onSelect?: (asset: ImageAsset) => void;
   onArchive?: (asset: ImageAsset) => void;
+  loading?: boolean;
+  loadError?: string;
 }) {
+  const uploaders = useRows<Profile>("tUser");
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("active"),
     [limit, setLimit] = useState(24);
-  const filtered = assets.filter(
-    (x) =>
-      (filter === "all" || x.is_archived === (filter === "archived")) &&
-      `${x.display_name} ${x.id}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = assets
+    .filter(
+      (x) =>
+        (filter === "all" || x.is_archived === (filter === "archived")) &&
+        `${x.display_name} ${x.id}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
+    .sort(
+      (a, b) =>
+        a.display_name.localeCompare(b.display_name, undefined, {
+          sensitivity: "base",
+        }) || a.id.localeCompare(b.id),
+    );
   return (
     <>
       <div className="form-grid">
@@ -335,7 +378,12 @@ function AssetGallery({
               {x.is_archived ? "Archived · " : ""}
               {new Date(x.created_at).toLocaleString()}
             </p>
-            <small>Uploaded by {x.owner_id}</small>
+            <small>
+              Uploaded by{" "}
+              {uploaders.data.find((u) => u.id === x.owner_id)?.display_name ||
+                "Retained Account"}
+            </small>
+            <CopyId id={x.id} />
             <div className="button-row">
               {onSelect && !x.is_archived && (
                 <button type="button" onClick={() => onSelect(x)}>
@@ -351,7 +399,13 @@ function AssetGallery({
           </article>
         ))}
       </div>
-      {!filtered.length && <p>No images match.</p>}
+      {!loading && !loadError && !filtered.length && (
+        <p role="status">
+          {assets.length === 0
+            ? "No images in this library yet."
+            : "No images match your filters."}
+        </p>
+      )}
       {filtered.length > limit && (
         <button type="button" onClick={() => setLimit((n) => n + 24)}>
           Show more images
@@ -371,9 +425,11 @@ export default function ImageLibrary() {
       <Intro
         title={
           mode === "upload"
-            ? "Upload image"
+            ? "Upload Image"
             : mode === "archive"
-              ? "Confirm image archive"
+              ? selected?.is_archived
+                ? "Confirm Image Restore"
+                : "Confirm Image Archive"
               : "Image Library"
         }
       />
@@ -392,8 +448,9 @@ export default function ImageLibrary() {
           <ImagePreview asset={selected} alt={selected.display_name} />
           <h3>{selected.display_name}</h3>
           <p>
-            Archived images stay available in existing teams and history. Their
-            stored files are retained.
+            {selected.is_archived
+              ? "Restore this image to the active library so it can be selected for teams again."
+              : "Archiving hides this image from new selections. Existing teams and history keep their images, and the stored file is retained."}
           </p>
           <button
             disabled={a.busy}
@@ -418,13 +475,42 @@ export default function ImageLibrary() {
           </a>
           <AssetGallery
             assets={assets.data}
+            loading={assets.loading}
+            loadError={assets.error}
             onArchive={(x) => {
               window.location.hash = `/configuration/team-images?mode=archive&id=${x.id}`;
             }}
           />
         </>
       )}
-      <Notice error={assets.error || a.status} loading={assets.loading} />
+      <Notice
+        error={assets.error || a.error}
+        success={a.status}
+        loading={assets.loading}
+      />
     </div>
+  );
+}
+
+export function CopyId({ id }: { id: string }) {
+  const [status, setStatus] = useState("");
+  return (
+    <span className="copy-id">
+      <code>{id.slice(0, 8)}</code>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(id);
+            setStatus("ID Copied");
+          } catch {
+            setStatus(`Copy this ID: ${id}`);
+          }
+        }}
+      >
+        Copy ID
+      </button>
+      <small role="status">{status}</small>
+    </span>
   );
 }

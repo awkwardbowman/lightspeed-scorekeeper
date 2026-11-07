@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Auth, { useAccount } from "./Auth";
 import Pages from "./Pages";
 import Scorekeeper from "./Scorekeeper";
@@ -14,6 +14,10 @@ function Workspace() {
   const { profile } = useAccount();
   const [route, setRoute] = useState<Route>(readRoute);
   const [matchKey, setMatchKey] = useState(0);
+  const breadcrumbs: Route[] = [];
+  for (let current = route; current !== "/"; current = parentRoute(current)) {
+    breadcrumbs.unshift(current);
+  }
   useEffect(() => {
     const update = () => {
       if (sessionStorage.getItem("openMatch")) setMatchKey((k) => k + 1);
@@ -44,23 +48,24 @@ function Workspace() {
             {profile.display_name} · {profile.app_role}
           </span>
           <a href="#/account" className="nav-account">
-            My account
+            My Account
           </a>
         </div>
       </header>
       <nav className="app-breadcrumb" aria-label="Breadcrumb">
-        <a href="#/">Dashboard</a>
-        {route !== "/" && (
-          <>
-            <span>/</span>
-            {parentRoute(route) !== "/" && (
-              <a href={`#${parentRoute(route)}`}>
-                {titles[parentRoute(route)]}
-              </a>
+        <a href="#/" aria-current={route === "/" ? "page" : undefined}>
+          Dashboard
+        </a>
+        {breadcrumbs.map((crumb, index) => (
+          <Fragment key={crumb}>
+            <span aria-hidden="true">/</span>
+            {index === breadcrumbs.length - 1 ? (
+              <strong aria-current="page">{titles[crumb]}</strong>
+            ) : (
+              <a href={`#${crumb}`}>{titles[crumb]}</a>
             )}
-            <strong>{titles[route]}</strong>
-          </>
-        )}
+          </Fragment>
+        ))}
       </nav>
       <section className="app-screen" hidden={route === "/single-match"}>
         <Pages key={route} route={route} />

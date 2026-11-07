@@ -56,8 +56,15 @@ export const dashboardTiles: NavTile[] = [
     status: "planned",
   },
   {
+    route: "/events/teams",
+    title: "Manage Teams",
+    description: "Find, create, edit, and clone reusable team instances.",
+    icon: "♟",
+    status: "available",
+  },
+  {
     route: "/presets",
-    title: "Create Match Preset",
+    title: "Manage Match Presets",
     description: "Set up reusable match times and target scores.",
     icon: "◷",
     status: "planned",
@@ -177,12 +184,12 @@ export const configurationTiles: NavTile[] = [
 
 export const titles: Record<Route, string> = {
   "/": "Dashboard",
-  "/account": "Sign In",
+  "/account": "My Account",
   "/users": "Manage Users",
   "/fencers": "Manage Fencers",
   "/events": "Manage Events",
-  "/events/teams": "Event Teams",
-  "/presets": "Create Match Preset",
+  "/events/teams": "Manage Teams",
+  "/presets": "Manage Match Presets",
   "/run-event": "Run Event",
   "/run-event/standings": "Event Standings",
   "/run-event/standings/team": "Team History",

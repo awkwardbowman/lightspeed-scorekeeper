@@ -31,6 +31,7 @@ The tiers are **not SemVer numbers**. A patch release touching a scoring permiss
 | `teams` | `tests/team-instances.test.mjs` | Team lineage, cloning, rosters, assignments, snapshots, storage policies | C1 (high) |
 | `images` | `tests/image-assets.test.mjs` | Image validation, WebP decoder, upload retry, immutability, error recovery | C1 |
 | `browser` | `tests/browser.test.mjs` | Actual UI paths through disposable PostgreSQL/fixture transport, including team/image flows | C0 for changed live-match/auth screens; C1 for other covered UI workflows |
+| Full-release navigation audit | `tests/navigation-release.mjs` (invoked by `browser` only under T3) | All registered route renders, link-target registry, JSX button/link wiring, dismiss/Cancel/Back/X/Escape, nested pickers, unsaved-change discard | C1; required on every T3 full release |
 
 Tests not yet written cannot be counted as passing. In particular, the browser suite is one large integration file, not individual page-level suites, so browser selection currently runs the *whole* browser file. Deferrable Control Point and Traditional team execution remain outside the implemented feature scope.
 
@@ -89,7 +90,18 @@ All selector-driven commands run `npm run build` first by default; `--no-build` 
 
 The `scripts/test-select.mjs` registry is executable policy. Update this mapping whenever new tests, feature boundaries, or dependencies are added.
 
-**Browser behavior:** `--changed` prints a warning rather than silently trying to install/run Chromium. Supply `--browser` after installing Chromium, or choose T3. Explicit `--scope=ui` and `--only=browser` always run the browser suite.
+**Browser behavior:** `--changed` prints a warning rather than silently trying to install/run Chromium. Supply `--browser` after installing Chromium, or choose T3. Explicit `--scope=ui` and `--only=browser` run the normal browser suite without the heavier navigation-release audit.
+
+## Full-release-only navigation audit (PR #8)
+
+`npm run test:full` (T3) automatically sets `SCOREKEEPER_FULL_RELEASE_NAV=1` for the Playwright browser suite. Normal T0/T1/T2 and manual `npm run test:browser` do not set it. GitHub Actions manual `workflow_dispatch → level: full` installs Chromium and invokes this same test: no separate CI job or service is required. For a focused local navigation audit using the existing browser fixture, run `SCOREKEEPER_FULL_RELEASE_NAV=1 npm run test:browser` after installing Chromium.
+
+The browser suite verifies independent score/time/target Apply, preset-owned versus Custom prep settings, confirmed completion/report/reload, a lost-response penalty retry, immutable-result-preserving Abandon, image optimization and lost upload acknowledgement, and desktop/mobile layouts. Configuration coverage checks that saving ranking does not discard dirty penalty reasons and that duplicate shortcuts block saving.
+
+The full-release audit checks every declared JSX button/link/dialog and all 22 registered routes, visible internal links and dashboard/submenu tiles. It exercises management Create/Edit/Archive/Restore/Delete Cancel, dirty-form discard, team/image exits, full-screen Admin Resume Apply/Discard/Stay behavior, all four outcome confirmations and cancellation, penalty X/Escape, explicit expired-referee recovery, Report → Edit → correction → refreshed Report, and automatic target finalization. The new Admin screen replaces the obsolete nested Manage-dialog audit.
+
+Tests use fixture Auth/Storage transport backed by real disposable PostgreSQL commands and the actual image handler/decoder; they do not contact production. A green T3 verifies those flows, not every possible role/data branch or hosted deployment. Run T4 after coordinated schema/function/client rollout; see [PR8_RELEASE.md](PR8_RELEASE.md).
+
 
 ## Test requirements by change and release type
 

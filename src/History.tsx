@@ -105,6 +105,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
   const [scope, setScope] = useState("all");
+  const [matchOrder, setMatchOrder] = useState("newest");
   const [snapshotId, setSnapshotId] = useState("");
   const match = matches.data.find((m) => m.id === matchId);
   const list = matches.data.filter(
@@ -120,7 +121,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
       `${m.current_left_name} ${m.current_right_name} ${m.id}`
         .toLowerCase()
         .includes(search.toLowerCase()),
-  );
+  ).sort((a, b) => matchOrder === "oldest"
+    ? a.created_at.localeCompare(b.created_at)
+    : b.created_at.localeCompare(a.created_at));
   const finalized = snapshots.data
     .filter((s) => s.event_id === id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -182,8 +185,11 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 .filter(
                   (f) =>
                     !f.is_unregistered &&
-                    (archived || !f.is_archived) &&
-                    f.display_name.toLowerCase().includes(search.toLowerCase()),
+                    (archived || !f.is_archived),
+                )
+                .sort((a, b) =>
+                  a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+                  a.id.localeCompare(b.id),
                 )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
@@ -390,35 +396,74 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             </div>
           </>
         )}
-        <label>
-          Match scope
-          <select value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="all">All</option>
-            <option value="event">Event</option>
-            <option value="standalone">Standalone</option>
-          </select>
-        </label>
+        {kind !== "events" && (
+          <label>
+            Match scope
+            <select value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="all">All</option>
+              <option value="event">Event</option>
+              <option value="standalone">Standalone</option>
+            </select>
+          </label>
+        )}
+        {kind === "matches" && (
+          <label>
+            Match order
+            <select value={matchOrder} onChange={(e) => setMatchOrder(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+        )}
         <div className="selection-list">
-          {list.map((m) => (
-            <button
-              className="list-item"
-              key={m.id}
-              onClick={() => setMatchId(m.id)}
-            >
-              <strong>
-                {m.current_left_name} {m.left_score}–{m.right_score}{" "}
-                {m.current_right_name}
-              </strong>
-              <small>
-                {new Date(m.created_at).toLocaleString()} · {m.outcome}
-                {m.is_archived
-                  ? " · Archived"
-                  : m.is_void
-                    ? " · Void"
-                    : ""} · {m.id.slice(0, 8)}
-              </small>
-            </button>
-          ))}
+          {list.map((m) => {
+            // The authoritative adjudicated winner can differ from the
+            // numeric score following an audited referee override.
+            const leftWon = Boolean(m.finalized_at) && !m.is_void &&
+              m.outcome !== "draw" && m.winner_side === "left";
+            const rightWon = Boolean(m.finalized_at) && !m.is_void &&
+              m.outcome !== "draw" && m.winner_side === "right";
+            const result = !m.finalized_at
+              ? "Incomplete"
+              : m.outcome === "draw"
+                ? "Draw"
+                : leftWon
+                  ? `${m.current_left_name} Wins`
+                  : rightWon
+                    ? `${m.current_right_name} Wins`
+                    : m.outcome;
+            return (
+              <button
+                className="list-item"
+                key={m.id}
+                aria-pressed={matchId === m.id}
+                onClick={() => setMatchId(m.id)}
+              >
+                <span className="match-history-summary">
+                  <span className={leftWon ? "match-winner" : ""}>{m.current_left_name}</span>
+                  <span className="match-vs">vs</span>
+                  <span className={rightWon ? "match-winner" : ""}>{m.current_right_name}</span>
+                  <span className="match-history-score">
+                    [ <span className={leftWon ? "match-winner" : ""}>{m.left_score}</span>
+                    {" "}to{" "}
+                    <span className={rightWon ? "match-winner" : ""}>{m.right_score}</span> ]
+                  </span>
+                  <span className="match-history-outcome">{result}</span>
+                </span>
+                <small>
+                  {new Date(m.created_at).toLocaleString()}
+                  {m.is_archived
+                    ? " · Archived"
+                    : m.is_void
+                      ? " · Void"
+                      : ""} · {m.id.slice(0, 8)}
+                </small>
+              </button>
+            );
+          })}
+          {kind === "matches" && !matches.loading && list.length === 0 && (
+            <p role="status">No matches match your filters.</p>
+          )}
         </div>
       </section>
       {match && (

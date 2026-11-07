@@ -1,3 +1,7 @@
+# PR #8 release preparation
+
+For the new Match Prep, Admin Mode, Match Report, preset type and calendar-date migration, follow [PR8_RELEASE.md](PR8_RELEASE.md). Apply the migration before the client and complete hosted T4 acceptance. Preparing this branch does not deploy or merge it.
+
 # Team instances and image library — PR #6 (prepared, not deployed)
 
 See [TEAM_IMAGES_RELEASE.md](TEAM_IMAGES_RELEASE.md) for the additive migration, immutable private image storage, trusted image endpoint with bundled WASM, legacy mapping and validation. Apply the reviewed server changes before merging the client; GitHub main auto-deploys. No hosted changes were made by this build.

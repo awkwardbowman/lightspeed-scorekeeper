@@ -95,6 +95,9 @@ export default function Teams() {
     await teams.reload();
     window.location.hash = back.slice(1);
   }
+  const eventName = (team: TeamInstance) =>
+    events.data.find((event) => event.id === team.event_id)?.name ??
+    "Unassigned";
   const list = teams.data
     .filter(
       (t) =>
@@ -102,15 +105,17 @@ export default function Teams() {
           (filter === "unassigned"
             ? !t.event_id && !t.is_archived
             : t.is_archived === (filter === "archived"))) &&
-        `${t.name} ${t.id} ${events.data.find((e) => e.id === t.event_id)?.name ?? ""}`
+        `${t.name} ${t.id} ${eventName(t)}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
-    .sort(
-      (x, y) =>
-        (sort === "event"
-          ? String(x.event_id).localeCompare(String(y.event_id))
-          : x.name.localeCompare(y.name)) * (sort === "reverse" ? -1 : 1),
+    .sort((x, y) =>
+      sort === "event"
+        ? eventName(x).localeCompare(eventName(y), undefined, {
+            sensitivity: "base",
+          }) || x.name.localeCompare(y.name, undefined, { sensitivity: "base" })
+        : x.name.localeCompare(y.name, undefined, { sensitivity: "base" }) *
+          (sort === "reverse" ? -1 : 1),
     );
   return (
     <div className="team-pages">
@@ -134,9 +139,14 @@ export default function Teams() {
         Each event entry has its own roster and appearance. Clone a previous
         team to continue its history.
       </Intro>
-      {notice && <p role="status">{notice}</p>}
+      {notice && (
+        <p role="status" className="notice-feedback notice-success">
+          {notice}
+        </p>
+      )}
       <Notice
-        error={teams.error || events.error || assets.error || a.status}
+        error={teams.error || events.error || assets.error || a.error}
+        success={a.status}
         loading={teams.loading}
       />
       {mode === "lookup" || (mode === "clone" && !selected) ? (
@@ -148,9 +158,13 @@ export default function Teams() {
             >
               New team
             </a>
-            <a href={teamHref("clone", undefined, returnEvent)}>
-              Clone previous team
-            </a>
+            {mode === "clone" ? (
+              <a href={back}>Cancel</a>
+            ) : (
+              <a href={teamHref("clone", undefined, returnEvent)}>
+                Clone previous team
+              </a>
+            )}
             {returnEvent && <a href={back}>Back to event</a>}
           </div>
           <div className="form-grid">
@@ -231,16 +245,19 @@ export default function Teams() {
                           <>
                             <a href={teamHref("edit", t.id)}>Edit</a>
                             <a href={teamHref("roster", t.id)}>Roster</a>
-                            <a href={teamHref("clone", t.id)}>Clone</a>
-                            <a href={teamHref("history", t.id)}>History</a>
-                            <a
-                              href={teamHref(
-                                t.is_archived ? "restore" : "archive",
-                                t.id,
-                              )}
-                            >
-                              {t.is_archived ? "Restore" : "Archive"}
-                            </a>
+                            <details className="team-more">
+                              <summary>More</summary>
+                              <a href={teamHref("clone", t.id)}>Clone</a>
+                              <a href={teamHref("history", t.id)}>History</a>
+                              <a
+                                href={teamHref(
+                                  t.is_archived ? "restore" : "archive",
+                                  t.id,
+                                )}
+                              >
+                                {t.is_archived ? "Restore" : "Archive"}
+                              </a>
+                            </details>
                           </>
                         )}
                       </div>
@@ -250,7 +267,13 @@ export default function Teams() {
               </tbody>
             </table>
           </div>
-          {!list.length && <p>No teams match.</p>}
+          {!teams.loading && !teams.error && !list.length && (
+            <p role="status">
+              {teams.data.length === 0
+                ? "No teams yet."
+                : "No teams match your filters."}
+            </p>
+          )}
         </section>
       ) : mode === "create" ||
         ((mode === "edit" || mode === "clone") && selected) ? (
@@ -267,7 +290,9 @@ export default function Teams() {
         />
       ) : selected ? (
         <section className="card">
-          <a href={back}>← Back to lookup</a>
+          {(mode === "roster" || mode === "history") && (
+            <a href={back}>← Back to lookup</a>
+          )}
           <h3>{selected.name}</h3>
           {mode === "roster" ? (
             <Roster team={selected} onChange={teams.reload} />
@@ -344,6 +369,27 @@ function TeamEditor({
     [external, setExternal] = useState(team?.image_url ?? ""),
     [legacyPath, setLegacyPath] = useState(team?.image_path ?? null),
     [picker, setPicker] = useState(false);
+  const initial = useRef(
+    JSON.stringify({
+      name,
+      scoring,
+      eventId,
+      logo,
+      color,
+      external,
+      legacyPath,
+    }),
+  );
+  const dirty =
+    JSON.stringify({
+      name,
+      scoring,
+      eventId,
+      logo,
+      color,
+      external,
+      legacyPath,
+    }) !== initial.current;
   const members = useRows<TeamMember>("tTeamMember"),
     fencers = useRows<Fencer>("tFencer"),
     a = useAction(),
@@ -371,7 +417,6 @@ function TeamEditor({
   } as TeamInstance;
   return (
     <section className="card">
-      <a href={back}>← Back to lookup</a>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -528,9 +573,21 @@ function TeamEditor({
                 ? "Create team"
                 : clone
                   ? "Confirm clone"
-                  : "Save changes"}
+                  : "Save Changes"}
             </button>
-            <a href={back}>Cancel</a>
+            <a
+              className="secondary"
+              href={back}
+              onClick={(e) => {
+                if (
+                  a.busy ||
+                  (dirty && !confirm("Discard unsaved team changes?"))
+                )
+                  e.preventDefault();
+              }}
+            >
+              Cancel
+            </a>
           </div>
         </fieldset>
         {picker && (
@@ -549,7 +606,7 @@ function TeamEditor({
           />
         )}
       </form>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </section>
   );
 }
@@ -678,7 +735,8 @@ function Roster({
           ))}
       </ul>
       <Notice
-        error={members.error || fencers.error || a.status}
+        error={members.error || fencers.error || a.error}
+        success={a.status}
         loading={members.loading || fencers.loading}
       />
     </>
@@ -838,7 +896,8 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
         </>
       )}
       <Notice
-        error={teams.error || assets.error || a.status}
+        error={teams.error || assets.error || a.error}
+        success={a.status}
         loading={teams.loading}
       />
     </section>

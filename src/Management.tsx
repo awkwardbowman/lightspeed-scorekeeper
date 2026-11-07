@@ -8,7 +8,7 @@ export function Account() {
   const a = useAction(refresh);
   return (
     <>
-      <Intro title="My account">
+      <Intro title="My Account">
         {profile.email} · {profile.app_role}
       </Intro>
       <section className="card">
@@ -32,7 +32,7 @@ export function Account() {
             Save name
           </button>
         </form>
-        <Notice error={a.status} />
+        <Notice error={a.error} success={a.status} />
         <h3>Change password</h3>
         <PasswordForm onDone={refresh} />
         <button className="subtle" onClick={() => void db().auth.signOut()}>
