@@ -244,8 +244,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   : `Manage ${entity}`;
   return (
     <>
-      <Intro title={titleCase(title)} />
       {(mode === "relationships" || mode === "detail") && <BackLink href={backHref} />}
+      <Intro title={titleCase(title)} />
       <Notice error={r.error || presets.error || (entity === "events" ? eventRegistrations.error || eventTeams.error : "")} loading={r.loading} />
       {notice && (
         <p role="status" className="notice-feedback notice-success">
