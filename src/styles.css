@@ -469,3 +469,35 @@ a.primary:focus-visible, a.danger:focus-visible {
   color: var(--app-muted);
 }
 .list-item[aria-pressed="true"] { background: var(--raised-bg); box-shadow: inset 3px 0 var(--accent); }
+
+/* Shared action feedback: color reinforces meaning; text and live regions carry it. */
+.notice-feedback {
+  border-radius: 9px;
+  border: 1px solid;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.notice-success {
+  color: #c2f3dd;
+  background: #173c32;
+  border-color: #58a998;
+}
+.notice-error {
+  color: #ffd0d2;
+  background: #44252b;
+  border-color: #d67c84;
+}
+.image-preview-status { align-self: center; color: var(--app-muted); font-size: 0.85rem; }
+.record-result-summary {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  color: var(--app-muted);
+}
+.record-result-summary .subtle { min-height: 40px; padding: 0.5rem 0.75rem; }
