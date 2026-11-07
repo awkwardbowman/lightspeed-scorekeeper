@@ -47,6 +47,7 @@ function run(cmd, commandArgs, options = {}) {
   const result = spawnSync(cmd, commandArgs, {
     encoding: "utf8",
     stdio: options.capture ? "pipe" : "inherit",
+    env: { ...process.env, ...(options.env ?? {}) },
     shell: process.platform === "win32" && cmd === "npm",
   });
   if (result.error || result.status !== 0) {
@@ -147,6 +148,12 @@ if (!chosen.length) process.exit(0);
 if (!has("no-build")) run("npm", ["run", "build"]);
 for (const name of chosen) {
   console.log("\n== " + name + " ==");
-  run(process.execPath, [tests[name]]);
+  run(process.execPath, [tests[name]], {
+    // The exhaustive navigation/cancel/close audit is intentionally T3-only.
+    // T0/T1 and explicit browser-only runs keep their existing lighter scope.
+    env: name === "browser" && source === "tier: full"
+      ? { SCOREKEEPER_FULL_RELEASE_NAV: "1" }
+      : {},
+  });
 }
 console.log("\nPASS: " + chosen.length + " selected test suite(s).");
