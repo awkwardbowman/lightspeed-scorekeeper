@@ -86,6 +86,17 @@ export function StandingsTable({ data }: { data: Standing[] }) {
     </div>
   );
 }
+/** Distinguish same-named fencers without placing internal IDs in normal selections. */
+export function competitorLabel(fencer: Fencer, pool: Fencer[]): string {
+  const label = fencer.display_name + (fencer.affiliation ? ` · ${fencer.affiliation}` : "");
+  const duplicates = pool.filter((f) =>
+    f.display_name.trim().toLocaleLowerCase() === fencer.display_name.trim().toLocaleLowerCase() &&
+    f.affiliation.trim().toLocaleLowerCase() === fencer.affiliation.trim().toLocaleLowerCase(),
+  ).sort((a, b) => a.id.localeCompare(b.id));
+  return duplicates.length > 1
+    ? `${label} · Entry ${duplicates.findIndex((f) => f.id === fencer.id) + 1}`
+    : label;
+}
 export function Registration({ eventId }: { eventId: string }) {
   const f = useRows<Fencer>("tFencer");
   const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
@@ -95,8 +106,8 @@ export function Registration({ eventId }: { eventId: string }) {
   const registeredIds = new Set(r.data.filter((x) => x.event_id === eventId).map((x) => x.fencer_id));
   const visible = f.data.filter((competitor) =>
     !competitor.is_unregistered &&
-    !competitor.is_archived &&
-    competitor.display_name.toLowerCase().includes(search.toLowerCase()) &&
+    (!competitor.is_archived || registeredIds.has(competitor.id)) &&
+    `${competitor.display_name} ${competitor.affiliation}`.toLowerCase().includes(search.trim().toLowerCase()) &&
     (registrationFilter === "all" ||
       registeredIds.has(competitor.id) === (registrationFilter === "registered")),
   ).sort((a, b) =>
@@ -115,7 +126,7 @@ export function Registration({ eventId }: { eventId: string }) {
           <option value="unregistered">Unregistered</option>
         </select>
       </label>
-      <p role="status">{r.loading || f.loading ? "Loading competitors…" : `Showing ${visible.length} eligible fencers`}</p>
+      <p role="status">{r.loading || f.loading ? "Loading competitors…" : `Showing ${visible.length} fencers (${registeredIds.size} registered in this event)`}</p>
       <Notice error={r.error || f.error} />
       <div className="selection-list">
         {visible.map((f) => {
@@ -125,7 +136,7 @@ export function Registration({ eventId }: { eventId: string }) {
                 <input
                   type="checkbox"
                   checked={exists}
-                  disabled={a.busy || r.loading}
+                  disabled={a.busy || r.loading || f.is_archived}
                   onChange={() =>
                     void a.run(async () => {
                       const q = exists
@@ -142,11 +153,12 @@ export function Registration({ eventId }: { eventId: string }) {
                     })
                   }
                 />
-                {f.display_name} {f.affiliation && <small>({f.affiliation})</small>}
+                {competitorLabel(f, f.data)} {f.is_archived && <small>(Archived · historical registration, read-only)</small>}
               </label>
             );
           })}
       </div>
+      {!r.loading && !f.loading && visible.length === 0 && <p role="status">No fencers match this registration filter.</p>}
       <Notice error={a.error} success={a.status} />
     </section>
   );
@@ -472,7 +484,7 @@ export function RunEvent() {
                                 })
                               }
                             />
-                            {f.display_name}
+                            {competitorLabel(f, f.data)}
                           </label>
                         );
                       })}
@@ -522,14 +534,14 @@ export function RunEvent() {
                               key={f.id}
                               onClick={() => setSeeds([...seeds, f.id])}
                             >
-                              Add {f.display_name}
+                              Add {competitorLabel(f, f.data)}
                             </button>
                           ))}
                       </div>
                       <ol>
                         {seeds.map((id, i) => (
                           <li key={id}>
-                            {f.data.find((f) => f.id === id)?.display_name}{" "}
+                            {f.data.find((f) => f.id === id) ? competitorLabel(f.data.find((f) => f.id === id)!, f.data) : "Unavailable fencer"}{" "}
                             <button
                               className="icon-btn"
                               onClick={() =>
@@ -614,7 +626,7 @@ export function RunEvent() {
                     <option value="">Choose fencer</option>
                     {registered.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {f.display_name}
+                        {competitorLabel(f, f.data)}
                       </option>
                     ))}
                   </select>
