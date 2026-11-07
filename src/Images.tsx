@@ -383,7 +383,7 @@ function AssetGallery({
               {uploaders.data.find((u) => u.id === x.owner_id)?.display_name ||
                 "Retained Account"}
             </small>
-            <CopyId id={x.id} />
+
             <div className="button-row">
               {onSelect && !x.is_archived && (
                 <button type="button" onClick={() => onSelect(x)}>
@@ -492,25 +492,32 @@ export default function ImageLibrary() {
   );
 }
 
+/** Only show record identifiers in an explicit ID column or dedicated ID lookup. */
 export function CopyId({ id }: { id: string }) {
   const [status, setStatus] = useState("");
   return (
     <span className="copy-id">
-      <code>{id.slice(0, 8)}</code>
+      <code title={id}>{id.slice(0, 8)}</code>
       <button
         type="button"
+        className="copy-id-button"
+        aria-label="Copy ID"
+        title="Copy ID"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(id);
-            setStatus("ID Copied");
+            setStatus("ID copied");
           } catch {
-            setStatus(`Copy this ID: ${id}`);
+            setStatus("Unable to copy ID. Check browser clipboard permission.");
           }
         }}
       >
-        Copy ID
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="8" y="8" width="12" height="12" rx="2" />
+          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+        </svg>
       </button>
-      <small role="status">{status}</small>
+      {status && <small role="status">{status}</small>}
     </span>
   );
 }
