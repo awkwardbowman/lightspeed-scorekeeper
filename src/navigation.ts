@@ -64,7 +64,7 @@ export const dashboardTiles: NavTile[] = [
   },
   {
     route: "/presets",
-    title: "Create Match Preset",
+    title: "Manage Match Presets",
     description: "Set up reusable match times and target scores.",
     icon: "◷",
     status: "planned",
@@ -189,7 +189,7 @@ export const titles: Record<Route, string> = {
   "/fencers": "Manage Fencers",
   "/events": "Manage Events",
   "/events/teams": "Manage Teams",
-  "/presets": "Create Match Preset",
+  "/presets": "Manage Match Presets",
   "/run-event": "Run Event",
   "/run-event/standings": "Event Standings",
   "/run-event/standings/team": "Team History",
