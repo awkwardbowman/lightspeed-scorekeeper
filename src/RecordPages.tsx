@@ -262,9 +262,14 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 <tr>
                   <th>ID</th>
                   <th>Name</th>
-                  <th>
-                    {entity === "fencers" ? "Affiliation" : "Details"}
-                  </th>
+                  {entity === "users" ? (
+                    <>
+                      <th>Email</th>
+                      <th>Role</th>
+                    </>
+                  ) : (
+                    <th>{entity === "fencers" ? "Affiliation" : "Details"}</th>
+                  )}
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -307,13 +312,19 @@ export function RecordPage({ entity }: { entity: Entity }) {
                         <small title={x.id}>{x.id.slice(0, 8)}</small>
                       </td>
                       <td>{name(x)}</td>
-                      <td>
-                        {entity === "fencers"
-                          ? String(x.affiliation ?? "")
-                          : String(x.email ?? x.mode ?? "")}
-                        {entity === "events" && ` · ${x.competition_format}`}
-                        {entity === "users" && ` · ${x.app_role}`}
-                      </td>
+                      {entity === "users" ? (
+                        <>
+                          <td>{String(x.email ?? "")}</td>
+                          <td>{String(x.app_role ?? "")}</td>
+                        </>
+                      ) : (
+                        <td>
+                          {entity === "fencers"
+                            ? String(x.affiliation ?? "")
+                            : String(x.mode ?? "")}
+                          {entity === "events" && ` · ${x.competition_format}`}
+                        </td>
+                      )}
                       <td>
                         {String(
                           x.status ??
