@@ -469,11 +469,25 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
       {view === "prep" ? (
         <>
           <h2>Match Prep</h2>
+          {match?.phase_id && (
+            <p>
+              {match.event_name} ·{" "}
+              {match.phase_name ?? match.phase_name_snapshot}
+            </p>
+          )}
           <Prep
             key={match?.id ?? "new"}
             match={match}
             fencers={fencers.data}
-            presets={presets.data}
+            presets={
+              match?.phase_settings_snapshot
+                ? presets.data.map((p) =>
+                    p.id === match.preset_id
+                      ? ({ ...p, ...match.phase_settings_snapshot } as Preset)
+                      : p,
+                  )
+                : presets.data
+            }
             userId={profile.id}
             busy={unavailable}
             onConfirm={prep}
@@ -724,13 +738,13 @@ function Prep({
     String(match?.target_score ?? remembered?.target_score ?? ""),
   );
   const [type, setType] = useState(
-    match?.bracket_id && !match.group_id
+    !match?.phase_settings_snapshot && match?.bracket_id && !match.group_id
       ? "knockout"
       : (match?.match_type ?? remembered?.match_type ?? ""),
   );
   const locked = Boolean(preset);
   const eventType = match?.event_id
-    ? match.bracket_id && !match.group_id
+    ? !match.phase_settings_snapshot && match.bracket_id && !match.group_id
       ? "knockout"
       : match.match_type
     : null;

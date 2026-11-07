@@ -42,6 +42,16 @@ export default function MatchReport({
     <section className="match-report">
       <header>
         <h2>Match Report</h2>
+        {match.phase_id && (
+          <p>
+            Event: {match.event_name} · Phase:{" "}
+            {match.phase_name ?? match.phase_name_snapshot}
+            {match.phase_name_snapshot &&
+            match.phase_name_snapshot !== match.phase_name
+              ? ` · Played in ${match.phase_name_snapshot}`
+              : ""}
+          </p>
+        )}
         <div className="button-row">
           <button disabled={busy} onClick={onEdit}>
             Edit Match

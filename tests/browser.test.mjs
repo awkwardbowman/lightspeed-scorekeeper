@@ -248,6 +248,7 @@ try {
     JSON.stringify(v, (_, x) => (typeof x === "bigint" ? Number(x) : x));
   let dropNextPenalty = false;
   let dropNextImage = false;
+  let dropNextPhase = false;
   await page.route("http://127.0.0.1:54321/**", async (route) => {
     const req = route.request(),
       url = new URL(req.url());
@@ -320,6 +321,15 @@ try {
             ),
           )
         )[0].result;
+        if (
+          fn === "phase_command" &&
+          body.p_action === "generate" &&
+          dropNextPhase
+        ) {
+          dropNextPhase = false;
+          await route.abort("failed");
+          return;
+        }
         if (
           fn === "match_command" &&
           body.p_action === "penalty" &&
@@ -1313,6 +1323,18 @@ try {
   console.log(
     "PASS: Configuration section saves preserve other dirty input; keyboard collisions block saving.",
   );
+  if (!process.env.TEAM_ONLY) {
+    const { runPhaseBrowser } = await import("./phase-browser.mjs");
+    await runPhaseBrowser({
+      page,
+      q,
+      auth,
+      admin,
+      setDropNextPhase: () => {
+        dropNextPhase = true;
+      },
+    });
+  }
   // Full-release-only navigation/dismissal verification reuses the same
   // authenticated Playwright + disposable PostgreSQL fixture.
   if (

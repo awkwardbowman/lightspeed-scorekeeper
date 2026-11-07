@@ -1,3 +1,5 @@
+import BracketView from "./BracketView";
+import type { EventPhase, PhaseBracket } from "./phases";
 import { TeamBadge } from "./Teams";
 import MatchLog from "./MatchLog";
 import { type Operation } from "./liveMatch";
@@ -75,6 +77,12 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
     configuration: unknown;
     group_standings: Record<string, { name: string; standings: Standing[] }>;
     participants: Fencer[];
+    phase_snapshot?: (EventPhase & {
+      participants: { name: string; seed: number | null }[];
+      standings: Standing[];
+      brackets: PhaseBracket[];
+      matches: MatchRow[];
+    })[];
     team_snapshot:
       | (TeamInstance & {
           members: { id: string; fencer_id: string; fencer_name: string }[];
@@ -95,7 +103,8 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
     phase_id: string;
     format: string;
     is_archived: boolean;
-    graph: unknown;
+    graph: import("./tournament").BracketGraph;
+    created_at: string;
   }>("tBracket");
   const teams = useRows<TeamInstance>("vTeamInstances");
   const assets = useRows<ImageAsset>("tImageAsset");
@@ -112,22 +121,26 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const [matchOrder, setMatchOrder] = useState("newest");
   const [snapshotId, setSnapshotId] = useState("");
   const match = matches.data.find((m) => m.id === matchId);
-  const list = matches.data.filter(
-    (m) =>
-      (archived || (!m.is_archived && !m.is_void)) &&
-      (kind === "events"
-        ? m.event_id === id
-        : kind === "fencers"
-          ? m.left_fencer_id === id || m.right_fencer_id === id
-          : true) &&
-      (scope === "all" ||
-        (scope === "event" ? Boolean(m.event_id) : !m.event_id)) &&
-      `${m.current_left_name} ${m.current_right_name}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  ).sort((a, b) => matchOrder === "oldest"
-    ? a.created_at.localeCompare(b.created_at)
-    : b.created_at.localeCompare(a.created_at));
+  const list = matches.data
+    .filter(
+      (m) =>
+        (archived || (!m.is_archived && !m.is_void)) &&
+        (kind === "events"
+          ? m.event_id === id
+          : kind === "fencers"
+            ? m.left_fencer_id === id || m.right_fencer_id === id
+            : true) &&
+        (scope === "all" ||
+          (scope === "event" ? Boolean(m.event_id) : !m.event_id)) &&
+        `${m.current_left_name} ${m.current_right_name}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
+    .sort((a, b) =>
+      matchOrder === "oldest"
+        ? a.created_at.localeCompare(b.created_at)
+        : b.created_at.localeCompare(a.created_at),
+    );
   const finalized = snapshots.data
     .filter((s) => s.event_id === id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -188,13 +201,13 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               <option value="">Select a fencer</option>
               {fencers.data
                 .filter(
-                  (f) =>
-                    !f.is_unregistered &&
-                    (archived || !f.is_archived),
+                  (f) => !f.is_unregistered && (archived || !f.is_archived),
                 )
-                .sort((a, b) =>
-                  a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
-                  a.id.localeCompare(b.id),
+                .sort(
+                  (a, b) =>
+                    a.display_name.localeCompare(b.display_name, undefined, {
+                      sensitivity: "base",
+                    }) || a.id.localeCompare(b.id),
                 )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
@@ -208,33 +221,72 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           <>
             <h3>{events.data.find((e) => e.id === id)?.name}</h3>
             <p>{events.data.find((e) => e.id === id)?.description}</p>
-            <h4>Phases, groups and bracket generations</h4>
-            {selectedPhases.map((p) => (
-              <section key={p.id}>
-                <h4>
-                  {p.name} · {p.kind}
-                </h4>
-                <p>
-                  {groups.data
-                    .filter((g) => g.phase_id === p.id)
-                    .map((g) => g.name)
-                    .join(", ")}
-                </p>
-                {brackets.data
-                  .filter(
-                    (b) => b.phase_id === p.id && (archived || !b.is_archived),
-                  )
-                  .map((b) => (
-                    <details key={b.id}>
-                      <summary>
-                        {b.format} · {p.name}
-                        {b.is_archived ? " · Archived" : ""}
-                      </summary>
-                      <p>Bracket generation retained. Matches and results are shown below.</p>
-                    </details>
-                  ))}
-              </section>
-            ))}
+            <h4>
+              {snap?.phase_snapshot?.length
+                ? "Phases at Finalization"
+                : "Current Phases and Bracket Generations"}
+            </h4>
+            {snap?.phase_snapshot?.length
+              ? snap.phase_snapshot.map((p) => (
+                  <section key={p.id}>
+                    <h4>{p.name}</h4>
+                    <p>
+                      {p.match_type === "knockout" ? "Knockout" : "Standard"} ·{" "}
+                      {p.target_score ?? "No Target"} Points ·{" "}
+                      {p.duration_ms
+                        ? `${p.duration_ms / 1000}s`
+                        : "Preset unavailable"}
+                    </p>
+                    <ul>
+                      {p.participants.map((r, i) => (
+                        <li key={i}>
+                          {r.name} · {r.seed ? `Seed ${r.seed}` : "No Seed"}
+                        </li>
+                      ))}
+                    </ul>
+                    <StandingsTable data={p.standings} />
+                    {p.brackets?.map((b) => (
+                      <BracketView
+                        key={b.id}
+                        bracket={b}
+                        matches={p.matches ?? []}
+                        fencers={fencers.data}
+                      />
+                    ))}
+                  </section>
+                ))
+              : selectedPhases.map((p) => (
+                  <section key={p.id}>
+                    <h4>
+                      {p.name} ·{" "}
+                      {p.kind === "group"
+                        ? "Round Robin"
+                        : p.kind === "single"
+                          ? "Single Elimination"
+                          : "Double Elimination"}
+                    </h4>
+                    {brackets.data
+                      .filter(
+                        (b) =>
+                          b.phase_id === p.id && (archived || !b.is_archived),
+                      )
+                      .map((b) => (
+                        <details key={b.id}>
+                          <summary>
+                            {b.is_archived ? "Archived" : "Current"} Bracket ·{" "}
+                            {new Date(b.created_at).toLocaleString()}
+                          </summary>
+                          <BracketView
+                            bracket={b}
+                            matches={matches.data.filter(
+                              (m) => m.bracket_id === b.id,
+                            )}
+                            fencers={fencers.data}
+                          />
+                        </details>
+                      ))}
+                  </section>
+                ))}
             <h4>Team instances and current rosters</h4>
             {teams.data
               .filter((t) => t.event_id === id)
@@ -258,9 +310,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     <TeamBadge team={t} assets={assets.data} />
                     <ul>
                       {t.members.map((m) => (
-                        <li key={m.id}>
-                          {m.fencer_name}
-                        </li>
+                        <li key={m.id}>{m.fencer_name}</li>
                       ))}
                     </ul>
                   </article>
@@ -315,7 +365,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                       s.display_name,
                   }))}
                 />
-                <p className="muted">The original ranking configuration is retained with this finalized standings snapshot.</p>
+                <p className="muted">
+                  The original ranking configuration is retained with this
+                  finalized standings snapshot.
+                </p>
               </>
             )}
           </>
@@ -411,7 +464,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
         {kind === "matches" && (
           <label>
             Match order
-            <select value={matchOrder} onChange={(e) => setMatchOrder(e.target.value)}>
+            <select
+              value={matchOrder}
+              onChange={(e) => setMatchOrder(e.target.value)}
+            >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
             </select>
@@ -421,10 +477,16 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           {list.map((m) => {
             // The authoritative adjudicated winner can differ from the
             // numeric score following an audited referee override.
-            const leftWon = Boolean(m.finalized_at) && !m.is_void &&
-              m.outcome !== "draw" && m.winner_side === "left";
-            const rightWon = Boolean(m.finalized_at) && !m.is_void &&
-              m.outcome !== "draw" && m.winner_side === "right";
+            const leftWon =
+              Boolean(m.finalized_at) &&
+              !m.is_void &&
+              m.outcome !== "draw" &&
+              m.winner_side === "left";
+            const rightWon =
+              Boolean(m.finalized_at) &&
+              !m.is_void &&
+              m.outcome !== "draw" &&
+              m.winner_side === "right";
             const result = !m.finalized_at
               ? "Incomplete"
               : m.outcome === "draw"
@@ -442,23 +504,31 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 onClick={() => setMatchId(m.id)}
               >
                 <span className="match-history-summary">
-                  <span className={leftWon ? "match-winner" : ""}>{m.current_left_name}</span>
+                  <span className={leftWon ? "match-winner" : ""}>
+                    {m.current_left_name}
+                  </span>
                   <span className="match-vs">vs</span>
-                  <span className={rightWon ? "match-winner" : ""}>{m.current_right_name}</span>
+                  <span className={rightWon ? "match-winner" : ""}>
+                    {m.current_right_name}
+                  </span>
                   <span className="match-history-score">
-                    [ <span className={leftWon ? "match-winner" : ""}>{m.left_score}</span>
-                    {" "}to{" "}
-                    <span className={rightWon ? "match-winner" : ""}>{m.right_score}</span> ]
+                    [{" "}
+                    <span className={leftWon ? "match-winner" : ""}>
+                      {m.left_score}
+                    </span>{" "}
+                    to{" "}
+                    <span className={rightWon ? "match-winner" : ""}>
+                      {m.right_score}
+                    </span>{" "}
+                    ]
                   </span>
                   <span className="match-history-outcome">{result}</span>
                 </span>
                 <small>
                   {new Date(m.created_at).toLocaleString()}
-                  {m.is_archived
-                    ? " · Archived"
-                    : m.is_void
-                      ? " · Void"
-                      : ""}
+                  {m.phase_id &&
+                    ` · Phase: ${m.phase_name ?? m.phase_name_snapshot}`}
+                  {m.is_archived ? " · Archived" : m.is_void ? " · Void" : ""}
                 </small>
               </button>
             );
@@ -487,9 +557,25 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           <h3>
             {match.current_left_name} vs {match.current_right_name}
           </h3>
+          {match.phase_id && (
+            <p>
+              Phase: {match.phase_name ?? match.phase_name_snapshot}
+              {match.phase_name_snapshot &&
+              match.phase_name_snapshot !== match.phase_name
+                ? ` · Played in ${match.phase_name_snapshot}`
+                : ""}
+            </p>
+          )}
           <p>
-            {match.left_score}–{match.right_score} · {match.outcome === "draw" ? "Draw" : match.finalized_at ? "Final result" : "Incomplete"} · Referee{" "}
-            {users.data.find((u) => u.id === match.referee_id)?.display_name ?? (match.referee_id ? "Recorded referee" : "Not recorded")}
+            {match.left_score}–{match.right_score} ·{" "}
+            {match.outcome === "draw"
+              ? "Draw"
+              : match.finalized_at
+                ? "Final result"
+                : "Incomplete"}{" "}
+            · Referee{" "}
+            {users.data.find((u) => u.id === match.referee_id)?.display_name ??
+              (match.referee_id ? "Recorded referee" : "Not recorded")}
           </p>
           <div className="button-row">
             <button
@@ -504,12 +590,18 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             </button>
           </div>
           {(match.is_archived || match.is_void) && (
-            <p className="muted">Archived or void matches are read-only. Their saved history remains available below.</p>
+            <p className="muted">
+              Archived or void matches are read-only. Their saved history
+              remains available below.
+            </p>
           )}
           <h4>Audited match operations</h4>
           <Notice error={operations.error} />
           <MatchLog
-            names={{ left: match.current_left_name, right: match.current_right_name }}
+            names={{
+              left: match.current_left_name,
+              right: match.current_right_name,
+            }}
             operations={operations.data
               .filter((o) => o.match_id === match.id)
               .sort((a, b) => a.sequence - b.sequence)}
@@ -532,9 +624,23 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
                   .map((c) => (
                     <tr key={c.id}>
-                      <td><time dateTime={c.recorded_at}>{new Date(c.recorded_at).toLocaleString()}</time></td>
                       <td>
-                        {c.side === "left" ? match.current_left_name : match.current_right_name} · {c.call_type === "indirect" ? "Indirect hit" : c.call_type === "clean" ? "Clean hit" : c.call_type === "counter" ? "Counter" : c.call_type}
+                        <time dateTime={c.recorded_at}>
+                          {new Date(c.recorded_at).toLocaleString()}
+                        </time>
+                      </td>
+                      <td>
+                        {c.side === "left"
+                          ? match.current_left_name
+                          : match.current_right_name}{" "}
+                        ·{" "}
+                        {c.call_type === "indirect"
+                          ? "Indirect hit"
+                          : c.call_type === "clean"
+                            ? "Clean hit"
+                            : c.call_type === "counter"
+                              ? "Counter"
+                              : c.call_type}
                       </td>
                       <td>{c.points}</td>
                       <td>{(c.match_time_ms / 1000).toFixed(1)}s</td>
@@ -546,9 +652,18 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           </div>
           <h4>Match details</h4>
           <p>
-            {match.event_id ? events.data.find((e) => e.id === match.event_id)?.name ?? "Historical event" : "Standalone match"}
-            {" · "}{match.slot_key ? `Bracket slot ${match.slot_key}` : "Manual pairing"}
-            {" · "}{match.finalized_at ? `Finalized ${new Date(match.finalized_at).toLocaleString()}` : "Not finalized"}
+            {match.event_id
+              ? (events.data.find((e) => e.id === match.event_id)?.name ??
+                "Historical event")
+              : "Standalone match"}
+            {" · "}
+            {match.slot_key
+              ? `Bracket slot ${match.slot_key}`
+              : "Manual pairing"}
+            {" · "}
+            {match.finalized_at
+              ? `Finalized ${new Date(match.finalized_at).toLocaleString()}`
+              : "Not finalized"}
           </p>
           <h4>Correction audit</h4>
           {audit.data
@@ -563,7 +678,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             .map((a) => (
               <details key={a.id}>
                 <summary>
-                  {new Date(a.recorded_at).toLocaleString()} · {a.action} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"}
+                  {new Date(a.recorded_at).toLocaleString()} · {a.action} ·{" "}
+                  {users.data.find((u) => u.id === a.actor_id)?.display_name ??
+                    "System"}
                 </summary>
                 <p>{describeChanges(a.old_value, a.new_value)}</p>
               </details>

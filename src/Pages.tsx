@@ -2,7 +2,7 @@ import Teams from "./Teams";
 import ImageLibrary from "./Images";
 import { RecordPage } from "./RecordPages";
 import { Account } from "./Management";
-import { RunEvent } from "./Events";
+import { PhaseManager, PhaseRunner as RunEvent } from "./PhasePages";
 import { History } from "./History";
 import Configuration from "./Configuration";
 import { Intro } from "./ui";
@@ -58,6 +58,8 @@ export default function Pages({ route }: { route: Route }) {
       return <RecordPage entity="presets" />;
     case "/events":
       return <RecordPage entity="events" />;
+    case "/events/phases":
+      return <PhaseManager />;
     case "/events/teams":
       return <Teams />;
     case "/run-event":

@@ -1,3 +1,9 @@
+Current merge status (November 7, 2026): PR #9 merged; PR #10 integrated and regression-verified. Automatic Git deployments are disabled in `vercel.json`. The phase migration and production rollout require separate authorization; see DESIGN §23.
+
+# Event phases — implementation prepared, not deployed
+
+Follow [PHASES_RELEASE.md](PHASES_RELEASE.md) for the phase workflow migration, legacy reconciliation, rollout order and hosted acceptance. Local full regression passed; hosted release remains pending. Earlier sections below describe prior releases.
+
 # PR #8 release preparation
 
 For the new Match Prep, Admin Mode, Match Report, preset type and calendar-date migration, follow [PR8_RELEASE.md](PR8_RELEASE.md). Apply the migration before the client and complete hosted T4 acceptance. Preparing this branch does not deploy or merge it.

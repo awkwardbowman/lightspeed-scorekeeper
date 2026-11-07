@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 
 const tests = {
   tournament: "tests/tournament.test.mjs",
+  phases: "tests/phases.test.mjs",
   match: "tests/match-redesign.test.mjs",
   account: "tests/account-endpoint.test.mjs",
   database: "tests/database.test.mjs",
@@ -16,14 +17,15 @@ const suiteOrder = Object.keys(tests);
 const nonBrowser = suiteOrder.filter((name) => name !== "browser");
 const smoke = ["tournament", "match"];
 const areas = {
-  match: ["match", "database", "tournament"],
-  tournament: ["tournament", "match", "database"],
+  match: ["match", "phases", "database", "tournament"],
+  tournament: ["phases", "tournament", "match", "database"],
+  phases: ["phases", "tournament", "match", "database"],
   account: ["account", "database"],
-  database: ["database", "match", "teams", "tournament"],
+  database: ["database", "phases", "match", "teams", "tournament"],
   teams: ["teams", "database", "images"],
   images: ["images", "teams"],
-  events: ["tournament", "match", "database", "teams"],
-  history: ["match", "database", "teams"],
+  events: ["phases", "tournament", "match", "database", "teams"],
+  history: ["phases", "match", "database", "teams"],
   configuration: ["database", "account", "match", "teams"],
   ui: ["browser"],
   all: nonBrowser,
@@ -83,6 +85,7 @@ function affected(path) {
   if (p.startsWith("supabase/functions/image-assets/") || p.startsWith("supabase/functions/_shared/image")) return [...areas.images, "browser"];
   if (p.startsWith("supabase/")) return [...nonBrowser, "browser"];
   if (/^src\/(Scorekeeper|MatchLog|match|liveMatch|useMatchSession)\./.test(p)) return [...areas.match, "browser"];
+  if (/^src\/(phases|PhasePages|BracketView)\./.test(p)) return [...areas.phases, "browser"];
   if (/^src\/tournament\./.test(p)) return [...areas.tournament, "browser"];
   if (/^src\/Auth\./.test(p)) return [...areas.account, "browser"];
   if (/^src\/Teams\./.test(p)) return [...areas.teams, "browser"];

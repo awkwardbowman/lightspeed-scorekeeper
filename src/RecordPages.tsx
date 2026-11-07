@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount } from "./Auth";
 import { manage, rpc, write, type EventRecord, type Preset } from "./data";
-import { BackLink, Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
+import {
+  BackLink,
+  Intro,
+  Notice,
+  useAction,
+  useRows,
+  DeleteButton,
+} from "./ui";
 import { EventTeamAssignments } from "./Teams";
 import { CopyId } from "./Images";
 import { Registration } from "./Events";
@@ -144,11 +151,25 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const { profile } = useAccount();
   const r = useRows<Row>(def.table);
   const presets = useRows<Preset>("tMatchPreset");
-  const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>("tEventFencer", entity === "events");
-  const eventTeams = useRows<{ id: string; event_id: string | null; is_archived: boolean }>("vTeamInstances", entity === "events");
-  const invitations = useRows<{ id: boolean; invitations_paused: boolean }>("tAccountPolicy", entity === "users");
-  const invitationUnavailable = entity === "users" &&
-    (invitations.loading || Boolean(invitations.error) || !invitations.data[0] || invitations.data[0].invitations_paused);
+  const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>(
+    "tEventFencer",
+    entity === "events",
+  );
+  const eventTeams = useRows<{
+    id: string;
+    event_id: string | null;
+    is_archived: boolean;
+  }>("vTeamInstances", entity === "events");
+  const invitations = useRows<{ id: boolean; invitations_paused: boolean }>(
+    "tAccountPolicy",
+    entity === "users",
+  );
+  const invitationUnavailable =
+    entity === "users" &&
+    (invitations.loading ||
+      Boolean(invitations.error) ||
+      !invitations.data[0] ||
+      invitations.data[0].invitations_paused);
   const [params, setParams] = useState(query);
   useEffect(() => {
     const change = () => setParams(query());
@@ -177,7 +198,11 @@ export function RecordPage({ entity }: { entity: Entity }) {
     id = params.get("id") ?? "";
   const previousMode = useRef(mode);
   useEffect(() => {
-    if (entity === "events" && previousMode.current !== mode && mode === "lookup")
+    if (
+      entity === "events" &&
+      previousMode.current !== mode &&
+      mode === "lookup"
+    )
       void Promise.all([eventRegistrations.reload(), eventTeams.reload()]);
     previousMode.current = mode;
   }, [entity, mode, eventRegistrations.reload, eventTeams.reload]);
@@ -188,8 +213,14 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const name = (x: Row) => String(x.display_name ?? x.name ?? "");
   const eventCount = (x: Row) =>
     x.competition_format === "team"
-      ? new Set(eventTeams.data.filter((t) => t.event_id === x.id).map((t) => t.id)).size
-      : new Set(eventRegistrations.data.filter((f) => f.event_id === x.id).map((f) => f.fencer_id)).size;
+      ? new Set(
+          eventTeams.data.filter((t) => t.event_id === x.id).map((t) => t.id),
+        ).size
+      : new Set(
+          eventRegistrations.data
+            .filter((f) => f.event_id === x.id)
+            .map((f) => f.fencer_id),
+        ).size;
   const eventCountLoading = eventRegistrations.loading || eventTeams.loading;
   const inactive = (x: Row) =>
     entity === "users"
@@ -230,11 +261,12 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const mayEdit = (x?: Row) =>
     entity !== "users" ||
     (profile.app_role === "admin" && x?.app_role !== "admin" && !x?.is_deleted);
-  const backHref = mode === "relationships" && params.get("return") === "run-event"
-    ? "#/run-event"
-    : mode === "relationships" && params.get("return") === "detail"
-      ? href("detail", id)
-      : `#${base}`;
+  const backHref =
+    mode === "relationships" && params.get("return") === "run-event"
+      ? "#/run-event"
+      : mode === "relationships" && params.get("return") === "detail"
+        ? href("detail", id)
+        : `#${base}`;
   const title =
     mode === "delete"
       ? "Confirm delete user access"
@@ -255,9 +287,20 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   : `Manage ${entity}`;
   return (
     <>
-      {(mode === "relationships" || mode === "detail") && <BackLink href={backHref} />}
+      {(mode === "relationships" || mode === "detail") && (
+        <BackLink href={backHref} />
+      )}
       <Intro title={titleCase(title)} />
-      <Notice error={r.error || presets.error || (entity === "events" ? eventRegistrations.error || eventTeams.error : "")} loading={r.loading} />
+      <Notice
+        error={
+          r.error ||
+          presets.error ||
+          (entity === "events"
+            ? eventRegistrations.error || eventTeams.error
+            : "")
+        }
+        loading={r.loading}
+      />
       {notice && (
         <p role="status" className="notice-feedback notice-success">
           {notice}
@@ -267,9 +310,22 @@ export function RecordPage({ entity }: { entity: Entity }) {
         <section className="card record-lookup">
           <div className="button-row">
             {invitationUnavailable ? (
-              <button type="button" className="primary" disabled title={invitations.data[0]?.invitations_paused ? "Invitations are paused by the Admin." : "Checking invitation availability."}>New User</button>
+              <button
+                type="button"
+                className="primary"
+                disabled
+                title={
+                  invitations.data[0]?.invitations_paused
+                    ? "Invitations are paused by the Admin."
+                    : "Checking invitation availability."
+                }
+              >
+                New User
+              </button>
             ) : (
-              <a className="primary" href={href("create")}>New {titleCase(def.name)}</a>
+              <a className="primary" href={href("create")}>
+                New {titleCase(def.name)}
+              </a>
             )}
             {entity === "events" && <a href="#/events/teams">Manage teams</a>}
             {entity === "users" && <InvitationPolicy policy={invitations} />}
@@ -399,27 +455,37 @@ export function RecordPage({ entity }: { entity: Entity }) {
                       ) : entity === "events" ? (
                         <>
                           <td>{displayScoringMode(x.mode)}</td>
-                          <td>{displayCompetitionFormat(x.competition_format)}</td>
+                          <td>
+                            {displayCompetitionFormat(x.competition_format)}
+                          </td>
                           <td>{displayDate(x.start_date)}</td>
                           <td>{displayDate(x.end_date)}</td>
-                          <td>{eventCountLoading ? "Loading…" : `${eventCount(x)} ${x.competition_format === "team" ? "teams" : "fencers"}`}</td>
+                          <td>
+                            {eventCountLoading
+                              ? "Loading…"
+                              : `${eventCount(x)} ${x.competition_format === "team" ? "teams" : "fencers"}`}
+                          </td>
                         </>
                       ) : (
                         <td>
-                          {entity === "fencers" ? String(x.affiliation ?? "") : String(x.mode ?? "")}
+                          {entity === "fencers"
+                            ? String(x.affiliation ?? "")
+                            : String(x.mode ?? "")}
                           {entity === "presets" &&
                             ` · ${x.match_type === "knockout" ? "Knockout" : "Standard"} · ${Number(x.duration_ms) / 1000}s · ${x.target_score ?? "No Target"}`}
                         </td>
                       )}
                       <td>
-                        {titleCase(String(
-                          x.status ??
-                            (inactive(x)
-                              ? entity === "users"
-                                ? "Disabled"
-                                : "Archived"
-                              : "Active"),
-                        ))}
+                        {titleCase(
+                          String(
+                            x.status ??
+                              (inactive(x)
+                                ? entity === "users"
+                                  ? "Disabled"
+                                  : "Archived"
+                                : "Active"),
+                          ),
+                        )}
                       </td>
                       <td>
                         <div className="button-row">
@@ -440,16 +506,21 @@ export function RecordPage({ entity }: { entity: Entity }) {
                               </a>
                             </>
                           )}
+                          {entity === "events" && (
+                            <a
+                              href={`#/run-event?event=${x.id}&from=events`}
+                              onClick={() =>
+                                sessionStorage.setItem("event", x.id)
+                              }
+                            >
+                              Run Event
+                            </a>
+                          )}
                           {(entity === "events" || entity === "teams") && (
                             <a href={href("relationships", x.id)}>
                               {x.competition_format === "team"
                                 ? "Team Assignments"
                                 : "Registrations"}
-                            </a>
-                          )}
-                          {entity === "events" && (
-                            <a href="#/run-event?from=events" onClick={() => sessionStorage.setItem("event", x.id)}>
-                              Run Event
                             </a>
                           )}
                         </div>
@@ -471,40 +542,52 @@ export function RecordPage({ entity }: { entity: Entity }) {
         <section className="card">
           {mode === "create" || mode === "edit" ? (
             <>
-            {entity === "users" && mode === "create" && invitationUnavailable && (
-              <p role="status" className="notice-feedback">
-                {invitations.data[0]?.invitations_paused
-                  ? "Invitations are paused. An Admin must resume invitations before new users can be invited."
-                  : invitations.error || "Checking whether invitations are available…"}
-              </p>
-            )}
-            <RecordForm
-              key={`${entity}:${mode}:${id}`}
-              entity={entity}
-              selected={mode === "edit" ? selected : undefined}
-              presets={presets.data}
-              busy={a.busy}
-              allowed={(mode === "create" || mayEdit(selected)) && !(entity === "users" && mode === "create" && invitationUnavailable)}
-              onSave={(values) =>
-                done(async () => {
-                  if (entity === "users")
-                    await manage(
-                      mode === "create"
-                        ? { action: "invite", ...values }
-                        : { action: "edit", id, ...values },
-                    );
-                  else
-                    await write(
-                      def.table,
-                      {
-                        ...values,
-                        ...(mode === "create" ? { owner_id: profile.id } : {}),
-                      },
-                      mode === "edit" ? id : undefined,
-                    );
-                })
-              }
-            />
+              {entity === "users" &&
+                mode === "create" &&
+                invitationUnavailable && (
+                  <p role="status" className="notice-feedback">
+                    {invitations.data[0]?.invitations_paused
+                      ? "Invitations are paused. An Admin must resume invitations before new users can be invited."
+                      : invitations.error ||
+                        "Checking whether invitations are available…"}
+                  </p>
+                )}
+              <RecordForm
+                key={`${entity}:${mode}:${id}`}
+                entity={entity}
+                selected={mode === "edit" ? selected : undefined}
+                presets={presets.data}
+                busy={a.busy}
+                allowed={
+                  (mode === "create" || mayEdit(selected)) &&
+                  !(
+                    entity === "users" &&
+                    mode === "create" &&
+                    invitationUnavailable
+                  )
+                }
+                onSave={(values) =>
+                  done(async () => {
+                    if (entity === "users")
+                      await manage(
+                        mode === "create"
+                          ? { action: "invite", ...values }
+                          : { action: "edit", id, ...values },
+                      );
+                    else
+                      await write(
+                        def.table,
+                        {
+                          ...values,
+                          ...(mode === "create"
+                            ? { owner_id: profile.id }
+                            : {}),
+                        },
+                        mode === "edit" ? id : undefined,
+                      );
+                  })
+                }
+              />
             </>
           ) : mode === "archive" || mode === "restore" ? (
             <>
@@ -586,11 +669,23 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 <a className="secondary" href={href("edit", id)}>
                   Edit Event
                 </a>
-                <a className="secondary" href={href("relationships", id) + "&return=detail"}>
+                <a
+                  className="secondary"
+                  href={href("relationships", id) + "&return=detail"}
+                >
                   {selected.competition_format === "team"
                     ? "Team Assignments"
                     : "Registrations"}
                 </a>
+                {selected.mode === "traditional" &&
+                  selected.competition_format === "individual" && (
+                    <a
+                      className="secondary"
+                      href={`#/events/phases?event=${id}`}
+                    >
+                      Manage Phases
+                    </a>
+                  )}
               </nav>
             </section>
           ) : mode === "relationships" && selected ? (
@@ -824,7 +919,13 @@ function RecordForm({
     </form>
   );
 }
-function InvitationPolicy({ policy: p }: { policy: ReturnType<typeof useRows<{ id: boolean; invitations_paused: boolean }>> }) {
+function InvitationPolicy({
+  policy: p,
+}: {
+  policy: ReturnType<
+    typeof useRows<{ id: boolean; invitations_paused: boolean }>
+  >;
+}) {
   const { profile } = useAccount();
   const a = useAction(p.reload);
   return (
@@ -846,7 +947,9 @@ function InvitationPolicy({ policy: p }: { policy: ReturnType<typeof useRows<{ i
       <span className="muted">
         {p.data[0]?.invitations_paused
           ? "Invitations are paused."
-          : p.loading ? "Checking invitation policy…" : "Managers are invited by email."}
+          : p.loading
+            ? "Checking invitation policy…"
+            : "Managers are invited by email."}
       </span>
       <Notice error={p.error || a.error} success={a.status} />
     </>
@@ -903,8 +1006,16 @@ function displayDate(value: unknown) {
 }
 
 function displayScoringMode(value: unknown) {
-  return value === "traditional" ? "Traditional" : value === "control_point" ? "Control Point" : titleCase(String(value ?? "Unknown"));
+  return value === "traditional"
+    ? "Traditional"
+    : value === "control_point"
+      ? "Control Point"
+      : titleCase(String(value ?? "Unknown"));
 }
 function displayCompetitionFormat(value: unknown) {
-  return value === "individual" ? "Individual" : value === "team" ? "Team" : titleCase(String(value ?? "Unknown"));
+  return value === "individual"
+    ? "Individual"
+    : value === "team"
+      ? "Team"
+      : titleCase(String(value ?? "Unknown"));
 }

@@ -598,6 +598,26 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .team-more a { display:inline-flex; padding:.6rem; border:1px solid var(--border); border-radius:9px; }
 .team-pages td:last-child .button-row { justify-content:flex-end; }
 
+/* Phase setup, execution and authoritative bracket visualization. */
+.phase-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(290px,100%),1fr)); gap:1rem; }
+.phase-tile { border-top:4px solid var(--border); color:var(--app-text); text-decoration:none; min-width:0; overflow-wrap:anywhere; }
+.phase-tile.state-empty { border-top-color:#79879a; }
+.phase-tile.state-scheduled { border-top-color:#78a9d3; background:#151d2b; }
+.phase-tile.state-active { border-top-color:#f0ba70; background:#30261d; }
+.phase-tile.state-complete { border-top-color:#69c58f; background:#142e25; }
+.phase-state { display:inline-block; border:1px solid currentColor; border-radius:20px; padding:.3rem .65rem; font-weight:700; font-size:.85rem; }
+.phase-state.state-empty { color:#b9c4d2; }.phase-state.state-scheduled { color:#a4c7e5; }.phase-state.state-active { color:#f0ba70; }.phase-state.state-complete { color:#a7eac4; }
+.phase-rules { font-weight:650; }
+.seed-editor { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }.seed-editor input { width:5rem; }
+.bracket-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:12px; padding:1rem; margin:1rem 0; }
+.bracket-rounds { display:flex; align-items:stretch; gap:1.25rem; min-width:min-content; }
+.bracket-round { display:flex; flex-direction:column; justify-content:space-around; gap:1rem; flex:0 0 245px; }
+.bracket-round > h3 { margin-bottom:auto; }
+.bracket-match { border:1px solid var(--border); border-left:3px solid #78a9d3; background:var(--panel-bg); padding:.75rem; border-radius:8px; position:relative; overflow-wrap:anywhere; }
+.bracket-match::after { content:"→"; position:absolute; top:50%; right:-1.15rem; color:var(--app-muted); }
+.bracket-round:last-child .bracket-match::after { content:none; }.bracket-match.finished { border-left-color:#69c58f; }
+.bracket-match h4 { margin-top:0; }.bracket-match p { margin:.5rem 0; }.bracket-match small { display:block; }.bracket-match button { margin-top:.5rem; }
+@media(max-width:600px) { .phase-grid {grid-template-columns:1fr;} .bracket-round{flex-basis:210px;} .seed-editor button{font-size:.8rem;padding:.4rem;} }
 /* Shared management navigation and compact, keyboard-accessible ID action. */
 .page-back { margin: -12px 0 18px; }
 .page-back a { display:inline-flex; align-items:center; min-height:44px; padding:8px 12px; border:1px solid #455774; border-radius:9px; color:#e9edf6; background:#263449; font-weight:750; text-decoration:none; }

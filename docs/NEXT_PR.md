@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: design approved; small management/Admin UX work in progress on `feat/scorekeeper-small-management-ux`, not yet merged or deployed. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
+Status: PR #9 merged; PR #10 integrated with main and verified for the owner-authorized merge. Combined regression and the 23-route navigation audit passed. Automatic Vercel Git deployments remain disabled; production migration and deployment are pending separate authorization. See [DESIGN.md §23](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md).
 
 ## Small / offloadable work
 
