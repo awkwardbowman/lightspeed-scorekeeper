@@ -793,7 +793,7 @@ try {
       await page.getByRole("button", { name: "left indirect +1" }).isDisabled(),
       true,
     );
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
     await page.getByRole("heading", { name: "Match Log", exact: true }).waitFor();
     await page.getByRole("heading", { name: "Previous Cards", exact: true }).waitFor();
     assert.equal(await page.locator("details.match-rail").count(), 0, "Admin side panels cannot collapse");
@@ -820,7 +820,7 @@ try {
       "Nullify writes one immutable reversal",
     );
     await page.reload();
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
     await page.getByText("Nullified", { exact: true }).first().waitFor();
     assert.equal(
       await page.getByRole("button", { name: /Nullify log entry:.*clean/i }).count(),
@@ -937,7 +937,7 @@ try {
       ),
       "mobile has no horizontal overflow",
     );
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
     await page.getByRole("button", { name: "Penalty on Ari" }).click();
     await page.getByRole("button", { name: "Power", exact: true }).click();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
