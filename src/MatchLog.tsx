@@ -23,7 +23,12 @@ export default function MatchLog({
   const operationById = new Map(operations.map((o) => [o.id, o]));
   const reversible = (o: Operation) =>
     ["score", "penalty"].includes(o.kind) ||
-    (o.kind === "admin" && (o.left_delta !== 0 || o.right_delta !== 0));
+    (o.kind === "admin" &&
+      (o.left_delta !== 0 || o.right_delta !== 0) &&
+      !("remainingMs" in o.data) &&
+      !("targetScore" in o.data) &&
+      !("outcome" in o.data) &&
+      !("resume" in o.data));
   const humanLabel = (o: Operation) => {
     if (o.kind === "reverse") {
       const original = operationById.get(String(o.data.operationId));
