@@ -450,7 +450,7 @@ export default function ImageLibrary() {
           />
         </>
       )}
-      <Notice error={assets.error || a.status} loading={assets.loading} />
+      <Notice error={assets.error || a.error} success={a.status} loading={assets.loading} />
     </div>
   );
 }
