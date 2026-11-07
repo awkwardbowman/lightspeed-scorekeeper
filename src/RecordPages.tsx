@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount } from "./Auth";
 import { manage, rpc, write, type EventRecord, type Preset } from "./data";
 import { BackLink, Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
@@ -175,6 +175,12 @@ export function RecordPage({ entity }: { entity: Entity }) {
   }, [storage, search, status, sort, affiliation]);
   const mode = params.get("mode") ?? "lookup",
     id = params.get("id") ?? "";
+  const previousMode = useRef(mode);
+  useEffect(() => {
+    if (entity === "events" && previousMode.current !== mode && mode === "lookup")
+      void Promise.all([eventRegistrations.reload(), eventTeams.reload()]);
+    previousMode.current = mode;
+  }, [entity, mode, eventRegistrations.reload, eventTeams.reload]);
   const selected = r.data.find((x) => x.id === id);
   const base = entity === "teams" ? "/events/teams" : `/${entity}`;
   const href = (mode: string, id?: string) =>
