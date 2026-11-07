@@ -37,21 +37,21 @@ Implementation should follow this living file and update the canonical DESIGN.md
 - Added browser assertions for Abandon and persisted-result protection, Teams tile, danger route Cancel, winner-aware History, sort and no-results; updated full-release navigation audit fixture for post-Abandon state. **Tests have not been executed**, and none of these branch changes are merged/deployed. Run T3 and review all browser failures before accepting.
 - LEFT FOR IMPLEMENTATION MODEL: preset match-type schema and Prep integration, date-only Events migration, full-screen Admin Mode layout/winner editing/claims, Match Report graph/score breakdown and post-finalization correction, full palette/accessibility sweep, event detail restructuring, Fencer History.
 
-## Non-Live Match UX audit suggestions — PROPOSED, not implemented (2026-11-06)
-Prioritized heuristic review and reusable UX baseline live in DESIGN.md §17 and the shared Google Doc. Reviewed source, not browser; avoid confusing these recommendations with already committed PR #8 changes.
+## Non-Live Match UX standards — approved, implementation status (2026-11-06)
+Full rationale, user decisions, and per-file detail: DESIGN.md §§17–18 and the shared Google Doc.
 
-P1 SMALL/SMALL-MEDIUM (recommended next micro-fix batch):
-- Separate saved/success status from errors and screen reader alerts (ui.tsx Notice/useAction).
-- Dirty-form Cancel warnings for RecordPages, Teams and Configuration (only on changes).
-- Shared lookup Clear Filters / visible result counts, without altering search semantics.
-- Rename Presets Dashboard tile from Create Match Preset to Manage Match Presets (lookup destination).
-- Show Restore vs Archive title accurately on the image archive confirmation page.
-- Suppress Team/Image false "No results" messages while loading; explain empty vs filtered-out.
-- Sort Teams by display Event name instead of UUID.
-- Style Events Void as danger, not equal to Open.
+**Approved default practices:** Green success/red failure feedback with accessible status/alert text; alphabetize human-facing lookup choices by visible name rather than raw UUID except explicit ID sorting; automatically regenerate optimized image previews on file/quality/size changes (no manual Update Preview button), with explicit upload approval. Other UX cleanup proposals in §17 are generally approved but need practical implementation and review.
 
-P2 SMALL: contextual status/role labels; event row Registrations vs Team Assignments; remove irrelevant Standalone scope on Event History; separate Fencer History picker and match search; explain stale image preview; show understandable uploader names / Copy ID.
+**IMPLEMENTED ON design/pr-8-ui-consistency (not merged, browser tests pending):**
+- Shared action success/error channels and coherent red/green Notice styling, across all known call sites (src/ui.tsx 0a1be13; src/styles.css 1bb2942; related page commits).
+- Image processing auto-preview with stale asynchronous result rejection, current-settings upload validation, processing/error feedback; manual refresh button removed (Images.tsx 65a65be). Image Archive versus Restore headings and descriptions, loading-aware image empty states, name-sorted library (Images.tsx 1f764b4/daa0f5d).
+- Manage Match Presets label correct for lookup page (navigation.ts a979957).
+- Teams sorted by visible Event name, with loading-aware empty results (Teams.tsx fe0b047). Event, registration, image and Fencer dropdown choices default name sorting (Events 7ff0b8e, History 939dc40, Images daa0f5d).
+- Event match Void styled as Danger with an accessible label (Events 1368c44).
+- Lookup record counts, Clear Filters, contextual Archived/Disabled text, friendly User role labels and contextual Registrations/Team Assignments links (RecordPages 9d78d95/cf19820).
+- Event History hides irrelevant Standalone scope; Fencer History selection no longer unintentionally changes when searching match participants (History aa913b4).
+- tests/browser.test.mjs updated for automatic image preview refresh, filter clearing/count, success and failure feedback, Presets Dashboard navigation, and Restore confirmation. These tests have not run.
 
-P2 MEDIUM: friendly grouped keyboard shortcut labels with inline conflict validation; prevent Configuration partial-save from discarding other unsaved fields; consistent accessible in-app danger confirmations; reduce five-action Team row clutter on mobile; hide/disable unsupported planning-only modes where product semantics permit.
+**APPROVED BUT REMAINING:** Warn on dirty-form Cancel/Back and prevent Configuration partial saves overwriting other unsaved edits; accessible Copy ID and friendly uploader display; grouped keyboard mapping controls with inline conflicting-key feedback; simplify Team row actions on narrow screens; standardize in-app confirmations; identify clearly unsupported planning-only features and disable/label them appropriately. These are best implemented independently of the major live-match/preset changes.
 
-Only schedule or implement after testing the newly committed UI branch (build + browser/T3). Preserve approved complex PR #8 match/preset/server work as separate scope.
+**RELEASE GATE:** Existing branch lacks a verified TypeScript build/Playwright run/T3/T4 acceptance for this new set. Do not claim green CI, merge or deployment. Run selective UI/browser checks and full release suite before merge.
