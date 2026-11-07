@@ -36,17 +36,24 @@ export function Intro({
 }
 export function Notice({
   error,
+  success,
   loading,
 }: {
   error?: string;
+  success?: string;
   loading?: boolean;
 }) {
   return (
     <>
       {loading && <p role="status">Loading…</p>}
       {error && (
-        <p role="alert" className="cloud-message">
+        <p role="alert" className="notice-feedback notice-error">
           {error}
+        </p>
+      )}
+      {!error && success && (
+        <p role="status" className="notice-feedback notice-success">
+          {success}
         </p>
       )}
     </>
@@ -55,22 +62,24 @@ export function Notice({
 export function useAction(reload?: () => Promise<void>) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     setStatus("");
+    setError("");
     try {
       await action();
       await reload?.();
       setStatus("Saved.");
       return true;
     } catch (e) {
-      setStatus(message(e));
+      setError(message(e));
       return false;
     } finally {
       setBusy(false);
     }
   }
-  return { busy, status, run };
+  return { busy, status, error, run };
 }
 export function ArchiveFilter({
   checked,
@@ -140,7 +149,7 @@ export function DeleteButton({
       >
         Permanently delete
       </button>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </>
   );
 }
