@@ -105,6 +105,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const [search, setSearch] = useState("");
   const [archived, setArchived] = useState(false);
   const [scope, setScope] = useState("all");
+  const [matchOrder, setMatchOrder] = useState("newest");
   const [snapshotId, setSnapshotId] = useState("");
   const match = matches.data.find((m) => m.id === matchId);
   const list = matches.data.filter(
@@ -120,7 +121,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
       `${m.current_left_name} ${m.current_right_name} ${m.id}`
         .toLowerCase()
         .includes(search.toLowerCase()),
-  );
+  ).sort((a, b) => matchOrder === "oldest"
+    ? a.created_at.localeCompare(b.created_at)
+    : b.created_at.localeCompare(a.created_at));
   const finalized = snapshots.data
     .filter((s) => s.event_id === id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -398,6 +401,15 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             <option value="standalone">Standalone</option>
           </select>
         </label>
+        {kind === "matches" && (
+          <label>
+            Match order
+            <select value={matchOrder} onChange={(e) => setMatchOrder(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+        )}
         <div className="selection-list">
           {list.map((m) => {
             // The authoritative adjudicated winner can differ from the
@@ -442,6 +454,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               </button>
             );
           })}
+          {kind === "matches" && !matches.loading && list.length === 0 && (
+            <p role="status">No matches match your filters.</p>
+          )}
         </div>
       </section>
       {match && (
