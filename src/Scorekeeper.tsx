@@ -8,7 +8,7 @@ import {
   type Configuration,
 } from "./data";
 import { claim } from "./db/traditional";
-import { useRows, Notice } from "./ui";
+import { competitorLabel, useRows, Notice } from "./ui";
 import { clockText, uid } from "./match";
 import {
   command,
@@ -765,8 +765,7 @@ function Prep({
               .filter((f) => !match?.event_id || !f.is_unregistered)
               .map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.display_name}
-                  {f.affiliation ? ` · ${f.affiliation}` : ""}
+                  {competitorLabel(f, fencers)}
                 </option>
               ))}
           </select>
