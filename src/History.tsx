@@ -185,8 +185,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 .filter(
                   (f) =>
                     !f.is_unregistered &&
-                    (archived || !f.is_archived) &&
-                    f.display_name.toLowerCase().includes(search.toLowerCase()),
+                    (archived || !f.is_archived),
                 )
                 .sort((a, b) =>
                   a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
@@ -397,14 +396,16 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             </div>
           </>
         )}
-        <label>
-          Match scope
-          <select value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="all">All</option>
-            <option value="event">Event</option>
-            <option value="standalone">Standalone</option>
-          </select>
-        </label>
+        {kind !== "events" && (
+          <label>
+            Match scope
+            <select value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="all">All</option>
+              <option value="event">Event</option>
+              <option value="standalone">Standalone</option>
+            </select>
+          </label>
+        )}
         {kind === "matches" && (
           <label>
             Match order
