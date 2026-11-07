@@ -222,7 +222,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
     <>
       <Intro title={title} />
       <Notice error={r.error || presets.error} loading={r.loading} />
-      {notice && <p role="status">{notice}</p>}
+      {notice && <p role="status" className="notice-feedback notice-success">{notice}</p>}
       {mode === "lookup" ? (
         <section className="card record-lookup">
           <div className="button-row">
