@@ -225,8 +225,46 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
       setRemaining(current.current.remaining_ms);
   }, [pending]);
   async function showManage() {
-    if (match?.phase === "running") await send("pause");
+    if (lock.current || pendingRef.current) {
+      setError("Resolve the pending save before opening Match Management.");
+      return;
+    }
+    if (match?.phase === "running" && !(await send("pause"))) return;
     setManage(true);
+  }
+  // Leaving the scoreboard is NOT a void, a finalization, or a score change.
+  // The confirmed, paused match remains available from Match History.
+  async function abandonMatch() {
+    if (lock.current || pendingRef.current) {
+      setError("Resolve the pending save before leaving this match.");
+      return;
+    }
+    if (!window.confirm(
+      "Abandon this screen and return to the Dashboard? Any unapplied Admin Mode edits will be discarded. Saved calls and match history remain intact; this does not void or finalize the match.",
+    )) return;
+    if (current.current?.phase === "running" && !(await send("pause"))) return;
+    const id = current.current?.id;
+    if (id) {
+      try {
+        await db().rpc("release_match", { p_id: id, p_token: token.current });
+      } catch {
+        // A paused match stays persisted; a lost release response expires safely.
+      }
+    }
+    setCard(false);
+    setAdmin(false);
+    setManage(false);
+    setMatch(null);
+    current.current = null;
+    setOperations([]);
+    setPending(null);
+    pendingRef.current = null;
+    revision.current = null;
+    setView("prep");
+    setStatus("");
+    setError("");
+    localStorage.removeItem(key(profile.id));
+    window.location.hash = "/";
   }
   async function newMatch() {
     if (match) {
@@ -664,6 +702,7 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
                     match={match}
                     busy={unavailable}
                     onCancel={() => setAdmin(false)}
+                    onAbandon={() => void abandonMatch()}
                     onCard={() => setCard(true)}
                     onApply={async (d) => {
                       const ok = await send("admin", d);
@@ -942,12 +981,14 @@ function Admin({
   busy,
   onApply,
   onCancel,
+  onAbandon,
   onCard,
 }: {
   match: LiveMatch;
   busy: boolean;
   onApply: (data: Record<string, unknown>) => Promise<boolean>;
   onCancel: () => void;
+  onAbandon: () => void;
   onCard: () => void;
 }) {
   const [left, setLeft] = useState(match.left_score),
@@ -997,7 +1038,12 @@ function Admin({
     resume;
   return (
     <section>
-      <h3>Admin Mode — staged changes</h3>
+      <div className="admin-mode-heading">
+        <h3>Admin Mode — staged changes</h3>
+        <button className="danger" type="button" disabled={busy} onClick={onAbandon}>
+          Abandon Match
+        </button>
+      </div>
       <p>Changes apply together when saved. The timer remains paused.</p>
       <div className="fields">
         {controls("Left score", left, setLeft)}
