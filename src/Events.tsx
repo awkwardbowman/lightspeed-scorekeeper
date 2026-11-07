@@ -259,12 +259,14 @@ export function RunEvent() {
   }
   return (
     <>
+      {new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("from") === "events" ? (
+        <BackLink href="#/events" />
+      ) : window.location.hash.split("?")[0].replace(/^#/, "") !== "/run-event" ? (
+        <BackLink href="#/run-event" />
+      ) : null}
       <Intro title="Run Event">
         Select the event to manage its lifecycle and run scheduled matches.
       </Intro>
-      {new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("from") === "events" && (
-        <BackLink href="#/events" />
-      )}
       <EventPicker
         events={e.data}
         id={e.id}
