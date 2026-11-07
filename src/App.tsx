@@ -48,7 +48,7 @@ function Workspace() {
             {profile.display_name} · {profile.app_role}
           </span>
           <a href="#/account" className="nav-account">
-            My account
+            My Account
           </a>
         </div>
       </header>
