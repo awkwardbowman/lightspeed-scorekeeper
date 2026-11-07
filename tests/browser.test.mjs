@@ -612,6 +612,18 @@ try {
     }
     await page.goto("http://127.0.0.1:5187/#/users");
     await assertIdFirst();
+    assert.deepEqual(
+      await page.locator("table thead th").allTextContents()
+        .then((labels) => labels.map((label) => label.trim())),
+      ["ID", "Name", "Email", "Role", "Status", "Actions"],
+      "Users lookup must give Email and Role independent columns",
+    );
+    const managerRow = page.getByRole("row")
+      .filter({ has: page.getByRole("cell", { name: `${manager}@test.invalid`, exact: true }) });
+    await managerRow.waitFor();
+    assert.equal(await managerRow.locator("td").nth(2).innerText(), `${manager}@test.invalid`);
+    assert.equal(await managerRow.locator("td").nth(3).innerText(), "management",
+      "Role must not be concatenated into the Email cell");
     await page.getByRole("link", { name: "New user", exact: true }).click();
     await page
       .getByRole("heading", { name: "Invite user", exact: true })
