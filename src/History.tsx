@@ -14,6 +14,7 @@ import {
 import { EventPicker, StandingsTable } from "./Events";
 import {
   ArchiveFilter,
+  competitorLabel,
   BackLink,
   describeChanges,
   Intro,
@@ -184,7 +185,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 setMatchId("");
               }}
             >
-              <option value="">Select registered fencer</option>
+              <option value="">Select a fencer</option>
               {fencers.data
                 .filter(
                   (f) =>
@@ -197,7 +198,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.display_name}{f.affiliation ? ` · ${f.affiliation}` : ""}
+                    {competitorLabel(f, fencers.data)}
                   </option>
                 ))}
             </select>
@@ -462,8 +463,22 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               </button>
             );
           })}
-          {kind === "matches" && !matches.loading && list.length === 0 && (
-            <p role="status">No matches match your filters.</p>
+          {!matches.loading && list.length === 0 && (
+            <p role="status">
+              {kind === "events" && !id
+                ? "Select an event to see its matches and results."
+                : kind === "fencers" && !id
+                  ? "Select a fencer to see their previous matches."
+                  : search.trim()
+                    ? "No matches match this search. Try another competitor name."
+                    : scope !== "all"
+                      ? "No matches in this scope. Try another match scope."
+                      : kind === "events"
+                        ? "No matches recorded for this event."
+                        : kind === "fencers"
+                          ? "No matches recorded for this fencer."
+                          : "No matches recorded yet."}
+            </p>
           )}
         </div>
       </section>
@@ -473,7 +488,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             {match.current_left_name} vs {match.current_right_name}
           </h3>
           <p>
-            {match.left_score}–{match.right_score} · {match.outcome} · Referee{" "}
+            {match.left_score}–{match.right_score} · {match.outcome === "draw" ? "Draw" : match.finalized_at ? "Final result" : "Incomplete"} · Referee{" "}
             {users.data.find((u) => u.id === match.referee_id)?.display_name ?? (match.referee_id ? "Recorded referee" : "Not recorded")}
           </p>
           <div className="button-row">
@@ -485,23 +500,27 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 window.location.hash = "/single-match";
               }}
             >
-              Open / correct match
+              Open Match
             </button>
           </div>
+          {(match.is_archived || match.is_void) && (
+            <p className="muted">Archived or void matches are read-only. Their saved history remains available below.</p>
+          )}
           <h4>Audited match operations</h4>
           <Notice error={operations.error} />
           <MatchLog
+            names={{ left: match.current_left_name, right: match.current_right_name }}
             operations={operations.data
               .filter((o) => o.match_id === match.id)
               .sort((a, b) => a.sequence - b.sequence)}
           />
-          <h4>Original calls (including reversals)</h4>
+          <h4>Original scoring calls</h4>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>UTC</th>
-                  <th>Side / call</th>
+                  <th>Local time</th>
+                  <th>Competitor / action</th>
                   <th>Points</th>
                   <th>Clock</th>
                   <th>Status</th>
@@ -513,9 +532,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
                   .map((c) => (
                     <tr key={c.id}>
-                      <td>{c.recorded_at}</td>
+                      <td><time dateTime={c.recorded_at}>{new Date(c.recorded_at).toLocaleString()}</time></td>
                       <td>
-                        {c.side} · {c.call_type}
+                        {c.side === "left" ? match.current_left_name : match.current_right_name} · {c.call_type === "indirect" ? "Indirect hit" : c.call_type === "clean" ? "Clean hit" : c.call_type === "counter" ? "Counter" : c.call_type}
                       </td>
                       <td>{c.points}</td>
                       <td>{(c.match_time_ms / 1000).toFixed(1)}s</td>
