@@ -891,6 +891,32 @@ try {
   console.log(
     "PASS team/image browser → real handler/decoder → PostgreSQL → UI: canvas optimization, preview approval, lost upload response, shared logos, clone rosters/lineage, independent colors, event-side assignment, archival retention and mobile layout.",
   );
+  // Full-release-only navigation/dismissal verification reuses the same
+  // authenticated Playwright + disposable PostgreSQL fixture.
+  if (process.env.SCOREKEEPER_FULL_RELEASE_NAV === "1" && !process.env.TEAM_ONLY) {
+    const { runNavigationReleaseAudit } = await import("./navigation-release.mjs");
+    const oneId = async (table, name) => {
+      const field = table === "tFencer" ? "display_name" : "name";
+      const result = await q(`select id from public."${table}" where "${field}"=$1`, [name]);
+      assert.equal(result.length, 1, `Missing navigation fixture: ${name}`);
+      return result[0].id;
+    };
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await runNavigationReleaseAudit({
+      page,
+      baseUrl: "http://127.0.0.1:5187",
+      fixtures: {
+        managerId: manager,
+        fencerId: await oneId("tFencer", "Team Browser Fencer"),
+        archivedFencerId: await oneId("tFencer", "Renamed Browser Fencer"),
+        presetId: await oneId("tMatchPreset", "Edited preset"),
+        eventId: teamEvent.id,
+        teamId: cloned.id,
+        imageId: image.id,
+      },
+    });
+    assert.deepEqual(errors, [], "Navigation audit triggered a browser runtime error");
+  }
 } finally {
   await browser.close();
   dev.kill();
