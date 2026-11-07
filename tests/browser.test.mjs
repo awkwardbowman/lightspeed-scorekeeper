@@ -865,7 +865,15 @@ try {
   await page.getByText(/512 × 256 px/).waitFor();
   await page.getByRole("combobox", { name: "Maximum size" }).selectOption("256");
   await page.getByText(/256 × 128 px/).waitFor();
+  const firstPreviewUrl = await page.getByAltText("Processed image preview").getAttribute("src");
   await page.getByRole("combobox", { name: "Quality" }).selectOption("0.9");
+  await page.waitForFunction(
+    (previous) => {
+      const img = document.querySelector('img[alt="Processed image preview"]');
+      return Boolean(img?.getAttribute("src") && img.getAttribute("src") !== previous);
+    },
+    firstPreviewUrl,
+  );
   await page.getByText("Preview automatically updated.").waitFor();
   assert.equal(await page.getByRole("button", { name: "Update preview" }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Approve preview and upload" }).isEnabled(), true);
