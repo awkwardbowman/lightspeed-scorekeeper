@@ -266,8 +266,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
             <table>
               <thead>
                 <tr>
-                  <th>Name</th>
                   <th>ID</th>
+                  <th>Name</th>
                   <th>
                     {entity === "fencers" ? "Affiliation" : "Details"}
                   </th>
@@ -302,10 +302,10 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   )
                   .map((x) => (
                     <tr key={x.id}>
-                      <td>{name(x)}</td>
                       <td>
                         <small title={x.id}>{x.id.slice(0, 8)}</small>
                       </td>
+                      <td>{name(x)}</td>
                       <td>
                         {entity === "fencers"
                           ? String(x.affiliation ?? "")
