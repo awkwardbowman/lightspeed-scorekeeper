@@ -1,6 +1,6 @@
 # Event phases — prepared, not deployed
 
-The large §21 L1–L5 implementation is in [PR #10](https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10) on `codex/event-phases`. Local T3 full regression passes. No hosted migration or production deployment has been performed. PR #9 is merged and integrated into this branch; combined SQL/browser regression and the 23-route navigation audit passed. Main retains `git.deploymentEnabled: false`, so merging does not deploy the client. Hosted migration approval remains pending after automatic approval review rejected applying the migration on merge authorization alone.
+The large §21 L1–L5 implementation is in [PR #10](https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10) on `codex/event-phases`. Local T3 full regression passes. No hosted migration or production deployment has been performed. PR #9 and PR #10 are merged into main; combined SQL/browser regression and the 23-route navigation audit passed. Main retains `git.deploymentEnabled: false`, so merging does not deploy the client. Hosted migration approval remains pending after automatic approval review rejected applying the migration on merge authorization alone.
 
 ## Rollout order
 

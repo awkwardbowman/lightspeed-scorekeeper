@@ -1,4 +1,4 @@
-Current merge status (November 7, 2026): PR #9 merged; PR #10 integrated and regression-verified. Automatic Git deployments are disabled in `vercel.json`. The phase migration and production rollout require separate authorization; see DESIGN §23.
+Current merge status (November 7, 2026): PR #9 and PR #10 are merged and regression-verified. Automatic Git deployments are disabled in `vercel.json`. The phase migration and production rollout require separate authorization; see DESIGN §25.
 
 # Event phases — implementation prepared, not deployed
 

@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: PR #9 merged; PR #10 integrated with main and verified for the owner-authorized merge. Combined regression and the 23-route navigation audit passed. Automatic Vercel Git deployments remain disabled; production migration and deployment are pending separate authorization. See [DESIGN.md §23](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md).
+Status: PR #9 and PR #10 are merged into main; combined source and integration checks are complete. Combined regression and the 23-route navigation audit passed. Automatic Vercel Git deployments remain disabled; production migration and deployment are pending separate authorization. See [DESIGN.md §25](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md).
 
 ## Small / offloadable work
 
