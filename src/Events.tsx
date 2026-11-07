@@ -99,6 +99,7 @@ export function competitorLabel(fencer: Fencer, pool: Fencer[]): string {
 }
 export function Registration({ eventId }: { eventId: string }) {
   const f = useRows<Fencer>("tFencer");
+  const allFencers = f.data;
   const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
   const a = useAction(r.reload);
   const [search, setSearch] = useState("");
@@ -153,7 +154,7 @@ export function Registration({ eventId }: { eventId: string }) {
                     })
                   }
                 />
-                {competitorLabel(f, f.data)} {f.is_archived && <small>(Archived · historical registration, read-only)</small>}
+                {competitorLabel(f, allFencers)} {f.is_archived && <small>(Archived · historical registration, read-only)</small>}
               </label>
             );
           })}
@@ -220,6 +221,7 @@ export function RunEvent() {
     "tEventFencer",
   );
   const f = useRows<Fencer>("tFencer");
+  const allFencers = f.data;
   const matches = useRows<MatchRow>("vMatchResults");
   const brackets = useRows<Bracket>("tBracket");
   const presets = useRows<Preset>("tMatchPreset");
@@ -484,7 +486,7 @@ export function RunEvent() {
                                 })
                               }
                             />
-                            {competitorLabel(f, f.data)}
+                            {competitorLabel(f, allFencers)}
                           </label>
                         );
                       })}
@@ -534,7 +536,7 @@ export function RunEvent() {
                               key={f.id}
                               onClick={() => setSeeds([...seeds, f.id])}
                             >
-                              Add {competitorLabel(f, f.data)}
+                              Add {competitorLabel(f, allFencers)}
                             </button>
                           ))}
                       </div>
@@ -626,7 +628,7 @@ export function RunEvent() {
                     <option value="">Choose fencer</option>
                     {registered.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {competitorLabel(f, f.data)}
+                        {competitorLabel(f, allFencers)}
                       </option>
                     ))}
                   </select>
