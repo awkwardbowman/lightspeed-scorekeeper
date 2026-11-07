@@ -37,3 +37,7 @@ Hosted acceptance and any still-pending PR #6 rollout remain release tasks. Fenc
 ## Local verification
 
 `CHROMIUM_PATH=/usr/bin/chromium npm run test:full` passed the production build and all seven suites, including 22-route navigation, post-finalization report refresh and automatic target completion. This uses disposable PostgreSQL and fixture Auth/Storage transport, not hosted production.
+
+## Production release record
+
+PR #8 merged as `3ef6260dc0ff8b1a52c7df99f9f657e422980072`. Hosted migration `pr8_match_presentation` version `20261107041636` was applied before merge. Existing three match and two call identities, original event timestamps/calendar projection and command/RLS permissions were verified. Vercel deployment `dpl_EwGVt9326FHWpMTepdGC9ZEZJ6ok` is READY. The production public URL returns HTTP 200 with the new client assets. Full signed-in/two-device acceptance remains manual.

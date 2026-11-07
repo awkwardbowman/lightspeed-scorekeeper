@@ -1,6 +1,6 @@
-# PR #8 — Match Prep, full-screen Admin Mode and Match Report
+# PR #8 — Released
 
-Implementation is prepared on `design/pr-8-ui-consistency`, including the earlier management/navigation/image-preview fixes. No production migration, deployment or merge is implied. See [DESIGN.md §14 and §19](DESIGN.md) and [PR8_RELEASE.md](PR8_RELEASE.md).
+PR #8 is merged as `3ef6260dc0ff8b1a52c7df99f9f657e422980072`. Hosted migration `20261107041636` is applied and the Vercel production deployment is READY. Full signed-in, two-device hosted acceptance remains a manual check. See [DESIGN.md §14 and §19](DESIGN.md) and [PR8_RELEASE.md](PR8_RELEASE.md).
 
 ## Implemented
 
@@ -16,7 +16,7 @@ Implementation is prepared on `design/pr-8-ui-consistency`, including the earlie
 
 The build and six non-browser suites pass, including new partial-correction, immediate adjudication, preset/date migration and real-ledger report regressions. `CHROMIUM_PATH=/usr/bin/chromium npm run test:full` passes all seven suites, including desktop/mobile scoring, team/image flows, Configuration dirty-state checks, all 22 routes and 152 visible internal links in the release navigation audit.
 
-Roll out `20261107033338_pr8_match_presentation.sql` before the client. Hosted T4 acceptance remains a distinct release gate; confirm the PR #6 image rollout separately if needed. Do not merge to auto-deploying `main` until the release prerequisites are satisfied.
+The source migration `20261107033338_pr8_match_presentation.sql` was applied before merge as hosted version `20261107041636`. PR #6 schema/image-function prerequisites were verified. Hosted T4 acceptance remains a distinct check.
 
 ## Outside this implementation
 
