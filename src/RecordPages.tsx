@@ -269,7 +269,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   <th>Name</th>
                   <th>ID</th>
                   <th>
-                    {entity === "fencers" ? "Affiliation / notes" : "Details"}
+                    {entity === "fencers" ? "Affiliation" : "Details"}
                   </th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -307,19 +307,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
                         <small title={x.id}>{x.id.slice(0, 8)}</small>
                       </td>
                       <td>
-                        {entity === "fencers" ? (
-                          <>
-                            {String(x.affiliation ?? "")}
-                            {Boolean(x.notes) && (
-                              <details className="record-notes">
-                                <summary title={String(x.notes)}>Notes</summary>
-                                <p>{String(x.notes)}</p>
-                              </details>
-                            )}
-                          </>
-                        ) : (
-                          String(x.email ?? x.mode ?? "")
-                        )}
+                        {entity === "fencers"
+                          ? String(x.affiliation ?? "")
+                          : String(x.email ?? x.mode ?? "")}
                         {entity === "events" && ` · ${x.competition_format}`}
                         {entity === "users" && ` · ${x.app_role}`}
                       </td>
