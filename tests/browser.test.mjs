@@ -473,6 +473,15 @@ try {
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
     await assertIdFirst();
+    // Affiliation is a case-insensitive substring search, not an exact dropdown.
+    const affiliationFilter = page.getByRole("searchbox", { name: "Affiliation", exact: true });
+    await affiliationFilter.fill("cAdE");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await affiliationFilter.fill("unmatched affiliation");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor({ state: "hidden" });
+    await affiliationFilter.fill("");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
     // Notes stay in the editor/database, not in the Fencer lookup table.
     assert.equal(
       await page.getByRole("columnheader", { name: "Affiliation", exact: true }).count(),
