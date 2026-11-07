@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: PR #9 small management/Admin UX and PR #10 large phase workflow are implemented and being integrated for the owner-authorized merge. Combined T3 and hosted migration/deployment verification are required before release. See [PHASES_RELEASE.md](PHASES_RELEASE.md).
+Status: PR #9 merged; PR #10 integrated with main and verified for the owner-authorized merge. Combined regression and the 23-route navigation audit passed. Automatic Vercel Git deployments remain disabled; production migration and deployment are pending separate authorization. See [DESIGN.md §23](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md).
 
 ## Small / offloadable work
 
