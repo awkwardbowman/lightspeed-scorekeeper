@@ -1,6 +1,6 @@
 # PR #8 planning — UI consistency, management pages and match presentation
 
-Status: PR #8 PLANNING BRANCH; two isolated low-risk code fixes committed (breadcrumb navigation and duplicate management return links); the rest is a design draft. No implementation PR opened or deployment triggered. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
+Status: PR #8 PLANNING BRANCH; breadcrumb and duplicate-return fixes plus navigation dismissal repairs and T3-only regression test committed. Remaining designs are drafts. No implementation PR opened, no production deployment, and the new browser audit has not yet been executed. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
 
 Canonical scope and acceptance criteria: [DESIGN.md §14](DESIGN.md) and [shared Google Doc](https://docs.google.com/document/d/1IvEPsjjLwE98B7_M6Qqg8PfcJ8aMCHCxpBAYFXsJW7k/edit).
 
@@ -23,3 +23,9 @@ Approved: add match_type (Standard/Knockout) to tMatchPreset, separate from scor
 - Deferred team/Control Point scoring.
 
 Implementation should follow this living file and update the canonical DESIGN.md plus shared Doc as decisions are revised. Keep completed/merged features out of the active backlog, but preserve unverified hosted acceptance separately.
+
+## Navigation audit — IMPLEMENTED ON BRANCH; release verification pending
+- Fixed the legacy Match Management X/Escape being inert inside Admin Mode. On close, active card popup dismisses; unapplied Admin changes prompt for discard; unresolved saves refuse to close with an error. Interim compatibility fix; §14I will replace this legacy dialog (src/Scorekeeper.tsx, commit 69ba86ef71a7).
+- Fixed the Teams Clone Previous Team source-picker self-link/no-Cancel dead end; added a real Cancel and removed redundant Back to Lookup from Team editors and archive/restore confirmations while preserving Roster/History Back (src/Teams.tsx, commit 171ccc36e3ef).
+- Added tests/navigation-release.mjs, invoked from tests/browser.test.mjs only in T3 full via scripts/test-select.mjs's SCOREKEEPER_FULL_RELEASE_NAV=1 flag. Validates static JSX buttons/links/dialogs, all registered route destinations, tile navigation, record cancel/discard paths, Teams/image picker exits and legacy Manage/Penalty X and Escape behavior. Documented in docs/TESTING.md.
+- **Important:** source-level inventory and checks are complete, but the full Playwright test has NOT been run in this environment. Run npm run test:full with Chromium (or GitHub Actions manual level=full) and fix any failures. Update legacy dialog assertions when the Admin Mode full-screen rewrite lands. No deployment or CI success is claimed.
