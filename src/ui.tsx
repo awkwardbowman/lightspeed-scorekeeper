@@ -162,12 +162,14 @@ export function DeleteButton({
     </>
   );
 }
-/** Summarize retained row audits without exposing raw payloads or UUIDs in the UI. */
-export function describeChanges(before: unknown, after: unknown): string {
+/** Readable before/after audit summary; relationship resolvers avoid exposing UUIDs. */
+export function describeChanges(
+  before: unknown,
+  after: unknown,
+  resolve?: (field: string, value: unknown) => string | undefined,
+): string {
   const asRow = (v: unknown): Record<string, unknown> =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? v as Record<string, unknown>
-      : {};
+    v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
   const oldRow = asRow(before), newRow = asRow(after);
   const labels: Record<string, string> = {
     display_name: "Display name", name: "Name", email: "Email",
@@ -180,13 +182,29 @@ export function describeChanges(before: unknown, after: unknown): string {
     winner_side: "Winner", result_override: "Official result",
     left_score: "Left score", right_score: "Right score",
   };
-  const changed = [...new Set([...Object.keys(oldRow), ...Object.keys(newRow)])]
-    .filter((key) =>
-      !/^id$|_id$|_at$|_by$|revision$|version$/.test(key) &&
-      JSON.stringify(oldRow[key]) !== JSON.stringify(newRow[key]),
-    )
-    .map((key) => labels[key] ?? key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()));
-  return changed.length ? `Changed: ${changed.join(", ")}` : "Change retained in audit history";
+  const display = (field: string, value: unknown): string => {
+    const resolved = resolve?.(field, value);
+    if (resolved !== undefined) return resolved;
+    if (value === null || value === undefined || value === "") return "None";
+    if (field === "event_id") return "Assigned event";
+    if (field === "logo_image_asset_id") return "Selected image";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) return value.length + " entries";
+    if (typeof value === "object") return "Updated settings";
+    if (typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) return "Updated reference";
+    return String(value).slice(0, 120);
+  };
+  const keys = [...new Set([...Object.keys(oldRow), ...Object.keys(newRow)])]
+    .filter((field) => (
+      (!/^(?:id|revision|version)$/.test(field) && !/(?:_id|_at|_by)$/.test(field)) ||
+      field === "event_id" || field === "logo_image_asset_id"
+    ) && JSON.stringify(oldRow[field]) !== JSON.stringify(newRow[field]));
+  const changes = keys.map((field) => {
+    const label = labels[field] ?? field.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const previous = display(field, oldRow[field]), next = display(field, newRow[field]);
+    return previous !== next ? `${label}: ${previous} → ${next}` : `${label} changed`;
+  });
+  return changes.length ? changes.join("; ") : "Change retained in audit history";
 }
 
 export function downloadJson(filename: string, value: unknown) {
