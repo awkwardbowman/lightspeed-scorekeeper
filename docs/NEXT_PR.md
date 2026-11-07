@@ -1,6 +1,6 @@
 # PR #8 planning — UI consistency, management pages and match presentation
 
-Status: DESIGN DRAFT ONLY (November 6, 2026); no PR opened, no application code changed or deployed. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
+Status: PR #8 PLANNING BRANCH; one low-risk code change committed (breadcrumb fix), the rest is a design draft. No implementation PR opened or deployment triggered. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
 
 Canonical scope and acceptance criteria: [DESIGN.md §14](DESIGN.md) and [shared Google Doc](https://docs.google.com/document/d/1IvEPsjjLwE98B7_M6Qqg8PfcJ8aMCHCxpBAYFXsJW7k/edit).
 
@@ -11,7 +11,7 @@ Canonical scope and acceptance criteria: [DESIGN.md §14](DESIGN.md) and [shared
 4. Match Prep with Left/Right Fencer row and Settings group; preset selects locked Length, Score Target and Match Type; Custom clears/enables; remove Round/Bout; Start Match and Cancel.
 5. Live headline more prominent than names and timer; score buttons bottom corners and Manage centered above saved status. Manage transitions directly to the same full-screen scoreboard in editable Admin Mode: left log rail (newest first, viewer-local time, confirmed reversals), center score/time preview with original values and per-section Apply controls, right current-fencer/current-event card-history rail, per-fencer Penalty popup, winner declaration and bottom Resume (returns without restarting clock). Preserve sensitive actions, match lifecycle and audit; see DESIGN.md §14I.
 6. Completed Match Report: after a finalized result, replace the centered Manage button with Match Report. On selection show a responsive three-column report: LEFT = newest-first local-time operation log; CENTER = official winner or Tie, actual final scores, two-side score progression graph; RIGHT = +1/+3/+5/Other score breakdown with one column per fencer. Penalty award points and signed admin corrections count as Other regardless of point amount; reversed operations do not count toward totals. Preserve event-order/legacy snapshot handling and final-score reconciliation.
-7. Breadcrumb separators at every depth. Readable Match History listing, winner-aware bolding, table/filter cleanup. Fencer History redesign deferred.
+7. Breadcrumb separators at every depth — IMPLEMENTED in src/App.tsx on this branch (commit 29e9e9a; route-chain checks across all 22 known routes passed; browser/production acceptance pending). Remaining: readable Match History listing, winner-aware bolding, table/filter cleanup. Fencer History redesign deferred.
 
 ## Approved preset model change and save guarantees
 Approved: add match_type (Standard/Knockout) to tMatchPreset, separate from scoring mode; update preset Create/Edit and database/API constraints with legacy fallback (Standard for standalone suggested), preserve authoritative event bracket type and effective match snapshots. Existing referee claim, cards, ledger, stats, knockout, audit, and hosted migration protections must not regress. Use selective tests for UI edits; any preset schema/backend change requires full regression and hosted acceptance.
