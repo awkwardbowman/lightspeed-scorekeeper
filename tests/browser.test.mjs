@@ -631,6 +631,16 @@ try {
     assert.equal(await page.getByLabel("Email", { exact: true }).count(), 1);
     assert.equal(await page.locator("input[type=password]").count(), 0);
     await page.getByRole("link", { name: "Cancel", exact: true }).click();
+    await page.goto(`http://127.0.0.1:5187/#/users?mode=edit&id=${manager}`);
+    const dangerZone = page.getByRole("region", { name: "Danger Zone" });
+    await dangerZone.getByRole("link", { name: "Delete Account Access…" }).click();
+    await page.getByRole("heading", { name: "Confirm delete user access" }).waitFor();
+    await page.getByRole("link", { name: "Cancel", exact: true }).click();
+    assert.equal((await q('select count(*)::int n from public."tUser" where id=$1', [manager]))[0].n, 1,
+      "Cancelling Delete Account Access must preserve the user");
+    await page.goto("http://127.0.0.1:5187/#/");
+    await page.getByRole("link", { name: /Manage Teams/i }).click();
+    await page.getByRole("heading", { name: "Manage Teams", exact: true }).waitFor();
     await page.goto("http://127.0.0.1:5187/#/single-match");
     await page
       .getByRole("heading", { name: "Match Prep", exact: true })
@@ -789,6 +799,14 @@ try {
     assert.equal(savedBout.right_score, 3);
     await page.goto("http://127.0.0.1:5187/#/single-match");
     await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
+    await page.goto("http://127.0.0.1:5187/#/history/matches");
+    const savedHistoryRow = page.getByRole("button")
+      .filter({ hasText: "Ari Wins" });
+    await savedHistoryRow.waitFor();
+    assert.deepEqual(await savedHistoryRow.locator(".match-winner").allTextContents(),
+      ["Ari", "4"], "History highlights only the adjudicated winner and their score");
+    assert.equal(await savedHistoryRow.locator(".match-history-score").innerText(),
+      "[ 4 to 3 ]", "History preserves effective numeric totals");
     assert.deepEqual(errors, []);
     console.log(
       "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, confirmed Abandon Match exit with preserved results, desktop/mobile.",
