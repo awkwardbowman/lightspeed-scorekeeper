@@ -172,6 +172,17 @@ export function RecordPage({ entity }: { entity: Entity }) {
         : Boolean(x.is_archived);
   const allowed = (x: Row) =>
     !x.is_unregistered && !(entity === "presets" && x.mode !== "traditional");
+  const matchesFilters = (x: Row) =>
+    (status === "all" || inactive(x) === (status === "inactive")) &&
+    (!affiliation.trim() ||
+      String(x.affiliation ?? "")
+        .toLowerCase()
+        .includes(affiliation.trim().toLowerCase())) &&
+    (entity === "fencers"
+      ? name(x).toLowerCase().includes(search.trim().toLowerCase())
+      : `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()));
   const a = useAction(r.reload);
   async function done(action: () => Promise<unknown>) {
     if (await a.run(action)) {
@@ -277,22 +288,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
               <tbody>
                 {r.data
                   .filter(allowed)
-                  .filter(
-                    (x) =>
-                      (status === "all" ||
-                        inactive(x) === (status === "inactive")) &&
-                      (!affiliation.trim() ||
-                        String(x.affiliation ?? "")
-                          .toLowerCase()
-                          .includes(affiliation.trim().toLowerCase())) &&
-                      (entity === "fencers"
-                        ? name(x)
-                            .toLowerCase()
-                            .includes(search.trim().toLowerCase())
-                        : `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
-                            .toLowerCase()
-                            .includes(search.toLowerCase())),
-                  )
+                  .filter(matchesFilters)
                   .sort((x, y) =>
                     sort === "id"
                       ? x.id.localeCompare(y.id)
@@ -366,9 +362,14 @@ export function RecordPage({ entity }: { entity: Entity }) {
               </tbody>
             </table>
           </div>
-          {r.data.filter(allowed).length === 0 && !r.loading && (
-            <p>No records yet.</p>
-          )}
+          {!r.loading && !r.error &&
+            r.data.filter(allowed).filter(matchesFilters).length === 0 && (
+              <p role="status">
+                {r.data.filter(allowed).length === 0
+                  ? "No records yet."
+                  : "No records match your filters."}
+              </p>
+            )}
         </section>
       ) : mode === "create" || selected ? (
         <section className="card">
