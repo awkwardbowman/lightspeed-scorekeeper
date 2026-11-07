@@ -15,7 +15,6 @@ import { EventPicker, StandingsTable } from "./Events";
 import {
   ArchiveFilter,
   BackLink,
-  downloadJson,
   Intro,
   Notice,
   Search,
@@ -486,27 +485,6 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               }}
             >
               Open / correct match
-            </button>
-            <button
-              className="subtle"
-              onClick={() =>
-                downloadJson(`match-${match.id}.json`, {
-                  match,
-                  calls: calls.data.filter((c) => c.match_id === match.id),
-                  operations: operations.data.filter(
-                    (o) => o.match_id === match.id,
-                  ),
-                  audit: audit.data.filter(
-                    (a) =>
-                      a.record_id === match.id ||
-                      calls.data.some(
-                        (c) => c.id === a.record_id && c.match_id === match.id,
-                      ),
-                  ),
-                })
-              }
-            >
-              Export full report
             </button>
           </div>
           <h4>Audited match operations</h4>
