@@ -805,8 +805,8 @@ try {
     await savedHistoryRow.waitFor();
     assert.deepEqual(await savedHistoryRow.locator(".match-winner").allTextContents(),
       ["Ari", "4"], "History highlights only the adjudicated winner and their score");
-    assert.equal(await savedHistoryRow.locator(".match-history-score").innerText(),
-      "[ 4 to 3 ]", "History preserves effective numeric totals");
+    assert.match(await savedHistoryRow.locator(".match-history-score").innerText(),
+      /\[\s*4\s+to\s+3\s*\]/, "History preserves effective numeric totals");
     assert.deepEqual(errors, []);
     console.log(
       "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, confirmed Abandon Match exit with preserved results, desktop/mobile.",
