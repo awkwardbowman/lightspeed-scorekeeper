@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { db, type Configuration as Config, write } from "./data";
-import { Intro, Notice, useAction, useRows } from "./ui";
+import { db, type Configuration as Config, type Profile, write } from "./data";
+import { describeChanges, Intro, Notice, useAction, useRows } from "./ui";
 const actions = [
   "toggle",
   "undo",
@@ -74,7 +74,7 @@ export default function Configuration({
       <Intro
         title={
           kind === "general"
-            ? "Ranking Configuration"
+            ? "Match & Ranking Settings"
             : kind === "key-mappings"
               ? "Keyboard Mappings"
               : "Team Images"
@@ -87,7 +87,9 @@ export default function Configuration({
         <fieldset disabled={r.loading || a.busy || Boolean(r.error)}>
           {kind === "general" && (
             <>
-              <h3>Card penalty reasons</h3>
+              <h3>Match rules</h3>
+              <p>Card reasons appear in the referee’s penalty picker. The overtime limit applies to knockout matches.</p>
+              <h4>Card penalty reasons</h4>
               <label>
                 Selectable reason tiles (one per line)
                 <textarea
@@ -297,6 +299,7 @@ function ConfigurationAudit() {
     old_value: unknown;
     new_value: unknown;
   }>("tAudit");
+  const users = useRows<Profile>("tUser");
   return (
     <section className="card">
       <h3>Configuration audit</h3>
@@ -309,15 +312,9 @@ function ConfigurationAudit() {
         .map((a) => (
           <details key={a.id}>
             <summary>
-              {a.recorded_at} · {a.actor_id ?? "System"} · {a.table_name}
+              {new Date(a.recorded_at).toLocaleString()} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"} · {a.table_name === "tConfiguration" ? "General settings" : "Team settings"}
             </summary>
-            <pre>
-              {JSON.stringify(
-                { before: a.old_value, after: a.new_value },
-                null,
-                2,
-              )}
-            </pre>
+            <p>{describeChanges(a.old_value, a.new_value)}</p>
           </details>
         ))}
     </section>

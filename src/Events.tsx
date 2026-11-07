@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { db, type EventRecord, type Fencer, type Standing } from "./data";
-import { Notice, Search, useAction, useRows } from "./ui";
+import { competitorLabel, Notice, Search, useAction, useRows } from "./ui";
 export function useEventSelection() {
   const r = useRows<EventRecord>("tEvent");
   const [id, setIdValue] = useState(
@@ -79,59 +79,96 @@ export function StandingsTable({ data }: { data: Standing[] }) {
 }
 export function Registration({ eventId }: { eventId: string }) {
   const f = useRows<Fencer>("tFencer");
+  const allFencers = f.data;
   const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
   const a = useAction(r.reload);
   const [search, setSearch] = useState("");
+  const [registrationFilter, setRegistrationFilter] = useState("all");
+  const registeredIds = new Set(
+    r.data.filter((x) => x.event_id === eventId).map((x) => x.fencer_id),
+  );
+  const visible = f.data
+    .filter(
+      (competitor) =>
+        !competitor.is_unregistered &&
+        (!competitor.is_archived || registeredIds.has(competitor.id)) &&
+        `${competitor.display_name} ${competitor.affiliation}`
+          .toLowerCase()
+          .includes(search.trim().toLowerCase()) &&
+        (registrationFilter === "all" ||
+          registeredIds.has(competitor.id) ===
+            (registrationFilter === "registered")),
+    )
+    .sort(
+      (a, b) =>
+        a.display_name.localeCompare(b.display_name, undefined, {
+          sensitivity: "base",
+        }) || a.id.localeCompare(b.id),
+    );
   return (
     <section>
-      <h3>Registered competitors</h3>
+      <h3>Event registrations</h3>
       <Search value={search} onChange={setSearch} />
+      <label>
+        Registration status
+        <select
+          value={registrationFilter}
+          onChange={(e) => setRegistrationFilter(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="registered">Registered</option>
+          <option value="unregistered">Unregistered</option>
+        </select>
+      </label>
+      <p role="status">
+        {r.loading || f.loading
+          ? "Loading competitors…"
+          : `Showing ${visible.length} fencers (${registeredIds.size} registered in this event)`}
+      </p>
       <Notice error={r.error || f.error} />
       <div className="selection-list">
-        {f.data
-          .filter(
-            (f) =>
-              !f.is_unregistered &&
-              !f.is_archived &&
-              f.display_name.toLowerCase().includes(search.toLowerCase()),
-          )
-          .sort(
-            (a, b) =>
-              a.display_name.localeCompare(b.display_name, undefined, {
-                sensitivity: "base",
-              }) || a.id.localeCompare(b.id),
-          )
-          .map((f) => {
-            const exists = r.data.some(
-              (x) => x.event_id === eventId && x.fencer_id === f.id,
-            );
-            return (
-              <label className="check" key={f.id}>
-                <input
-                  type="checkbox"
-                  checked={exists}
-                  disabled={a.busy}
-                  onChange={() =>
-                    void a.run(async () => {
-                      const q = exists
-                        ? db()
-                            .from("tEventFencer")
-                            .delete()
-                            .eq("event_id", eventId)
-                            .eq("fencer_id", f.id)
-                        : db()
-                            .from("tEventFencer")
-                            .insert({ event_id: eventId, fencer_id: f.id });
-                      const { error } = await q;
-                      if (error) throw error;
-                    })
-                  }
-                />
-                {f.display_name} <small>{f.id.slice(0, 8)}</small>
-              </label>
-            );
-          })}
+        {visible.map((f) => {
+          const exists = registeredIds.has(f.id);
+          return (
+            <label className="check" key={f.id}>
+              <input
+                type="checkbox"
+                checked={exists}
+                disabled={a.busy || r.loading || f.is_archived}
+                onChange={() => {
+                  if (
+                    exists &&
+                    !window.confirm(
+                      `Unregister ${f.display_name} from this event? Removing someone who has already competed may affect live standings. Do not remove played entrants until the post-match registration safeguards are implemented.`,
+                    )
+                  )
+                    return;
+                  void a.run(async () => {
+                    const q = exists
+                      ? db()
+                          .from("tEventFencer")
+                          .delete()
+                          .eq("event_id", eventId)
+                          .eq("fencer_id", f.id)
+                      : db()
+                          .from("tEventFencer")
+                          .insert({ event_id: eventId, fencer_id: f.id });
+                    const { error } = await q;
+                    if (error) throw error;
+                  });
+                }}
+              />
+              {competitorLabel(f, allFencers)}{" "}
+              {f.is_archived && (
+                <small>(Archived · historical registration, read-only)</small>
+              )}
+            </label>
+          );
+        })}
       </div>
+      {!r.loading && !f.loading && visible.length === 0 && (
+        <p role="status">No fencers match this registration filter.</p>
+      )}
       <Notice error={a.error} success={a.status} />
     </section>
   );

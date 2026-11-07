@@ -197,6 +197,7 @@ export async function runPhaseBrowser({
   await page
     .getByRole("button", { name: "Abandon Match", exact: true })
     .click();
+  await page.waitForURL("**/#/");
   await go(run);
   await page
     .locator(".phase-tile.state-active")
@@ -236,7 +237,7 @@ export async function runPhaseBrowser({
     .getByRole("button", { name: "Run Match", exact: true })
     .click();
   await page.getByRole("button", { name: "Start Match", exact: true }).click();
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
   await page.getByRole("button", { name: /Left Victory:/ }).click();
   await page
     .getByRole("button", { name: "Confirm Outcome", exact: true })
@@ -249,6 +250,7 @@ export async function runPhaseBrowser({
   await page
     .getByRole("button", { name: "Abandon Match", exact: true })
     .click();
+  await page.waitForURL("**/#/");
   await go(`${run}&phase=${winner}`);
   assert.equal(
     await page

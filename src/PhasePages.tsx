@@ -164,15 +164,16 @@ export function PhaseManager() {
   return (
     <>
       {mode !== "create" && mode !== "edit" && (
-        <a
-          className="page-back secondary"
-          href={back}
-          onClick={(ev) => {
-            if (cmd.busy || cmd.pending) ev.preventDefault();
-          }}
-        >
-          ← Back
-        </a>
+        <nav className="page-back" aria-label="Return navigation">
+          <a
+            href={back}
+            onClick={(ev) => {
+              if (cmd.busy || cmd.pending) ev.preventDefault();
+            }}
+          >
+            ← Back
+          </a>
+        </nav>
       )}
       <Intro
         title={
@@ -223,7 +224,7 @@ export function PhaseManager() {
                   </a>
                   <a
                     className="secondary"
-                    href={`#/events?mode=relationships&id=${event}`}
+                    href={`#/events?mode=relationships&id=${event}&return=run-event`}
                   >
                     Event Registration
                   </a>
@@ -858,10 +859,10 @@ export function PhaseRunner() {
   );
   return (
     <>
-      {id && (
-        <a className="page-back secondary" href={runPhaseUrl(event)}>
-          ← Back
-        </a>
+      {(id || p.get("from") === "events") && (
+        <nav className="page-back" aria-label="Return navigation">
+          <a href={id ? runPhaseUrl(event) : "#/events"}>← Back</a>
+        </nav>
       )}
       <Intro title={selected ? selected.name : "Run Event"} />
       <EventPicker
@@ -921,7 +922,7 @@ export function PhaseRunner() {
                 </a>
                 <a
                   className="secondary"
-                  href={`#/events?mode=relationships&id=${event}`}
+                  href={`#/events?mode=relationships&id=${event}&return=run-event`}
                 >
                   Manage Event Registration
                 </a>
