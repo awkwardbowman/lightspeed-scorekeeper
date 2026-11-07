@@ -95,6 +95,8 @@ export default function Teams() {
     await teams.reload();
     window.location.hash = back.slice(1);
   }
+  const eventName = (team: TeamInstance) =>
+    events.data.find((event) => event.id === team.event_id)?.name ?? "Unassigned";
   const list = teams.data
     .filter(
       (t) =>
@@ -102,15 +104,16 @@ export default function Teams() {
           (filter === "unassigned"
             ? !t.event_id && !t.is_archived
             : t.is_archived === (filter === "archived"))) &&
-        `${t.name} ${t.id} ${events.data.find((e) => e.id === t.event_id)?.name ?? ""}`
+        `${t.name} ${t.id} ${eventName(t)}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
-    .sort(
-      (x, y) =>
-        (sort === "event"
-          ? String(x.event_id).localeCompare(String(y.event_id))
-          : x.name.localeCompare(y.name)) * (sort === "reverse" ? -1 : 1),
+    .sort((x, y) =>
+      sort === "event"
+        ? eventName(x).localeCompare(eventName(y), undefined, { sensitivity: "base" }) ||
+          x.name.localeCompare(y.name, undefined, { sensitivity: "base" })
+        : x.name.localeCompare(y.name, undefined, { sensitivity: "base" }) *
+          (sort === "reverse" ? -1 : 1),
     );
   return (
     <div className="team-pages">
@@ -255,7 +258,13 @@ export default function Teams() {
               </tbody>
             </table>
           </div>
-          {!list.length && <p>No teams match.</p>}
+          {!teams.loading && !teams.error && !list.length && (
+            <p role="status">
+              {teams.data.length === 0
+                ? "No teams yet."
+                : "No teams match your filters."}
+            </p>
+          )}
         </section>
       ) : mode === "create" ||
         ((mode === "edit" || mode === "clone") && selected) ? (
