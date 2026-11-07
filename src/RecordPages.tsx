@@ -370,7 +370,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
         </section>
       ) : mode === "create" || selected ? (
         <section className="card">
-          <a href={`#${base}`}>← Back to lookup</a>
+          {mode === "relationships" && (
+            <a href={`#${base}`}>← Back to lookup</a>
+          )}
           {mode === "create" || mode === "edit" ? (
             <RecordForm
               key={`${entity}:${mode}:${id}`}
