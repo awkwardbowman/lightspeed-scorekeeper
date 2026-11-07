@@ -327,3 +327,18 @@ fieldset { min-width:0; border:1px solid var(--line,#cbd5e1); border-radius:.6re
 .team-pages button:not(.primary), .image-pages button:not(.primary) { background:#233147; color:#e9edf6; border:1px solid #4b5e7b; }
 .team-pages .card li { overflow-wrap:anywhere; }
 .team-pages .card li button { margin:.25rem .5rem; }
+
+/* Keep a visible exit at the upper right of the legacy Admin Mode.
+   This rule also works when the planned full-screen Admin Mode replaces the dialog. */
+.admin-mode-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.admin-mode-heading h3 { margin: 0.45rem 0; }
+.admin-mode-heading .danger {
+  margin-left: auto;
+  min-height: 44px;
+}
