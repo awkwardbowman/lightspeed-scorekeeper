@@ -711,8 +711,9 @@ export function RunEvent() {
                           </button>
                           {!m.is_archived && !m.is_void && (
                             <button
-                              className="subtle"
+                              className="danger"
                               disabled={a.busy}
+                              aria-label={`Void match: ${m.current_left_name} vs ${m.current_right_name}`}
                               onClick={() => void voidMatch(m.id)}
                             >
                               Void
