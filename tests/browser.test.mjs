@@ -1008,6 +1008,7 @@ try {
         eventId: teamEvent.id,
         teamId: cloned.id,
         imageId: image.id,
+        matchId: (await q("select id from public.\"vMatchResults\" where left_name='Ari'"))[0].id,
       },
     });
     assert.deepEqual(errors, [], "Navigation audit triggered a browser runtime error");
