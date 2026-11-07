@@ -629,3 +629,19 @@ The R1–R9 audit above is the original open finding list. The statuses below su
 - **R9 handled in independent PR #10 (not merged):** The phase/group/seeding/fixture-generation redesign is implemented separately on `codex/event-phases` (https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10). Keep PR #9 independent; review integration and release/migration order once both are ready. Phase workflow remains outside this small-fix PR.
 
 Release gates: successful changed-area CI on the final HEAD, a real browser test run for scoring/nullification and affected management screens, and a hosted acceptance preview. The open Vercel build-rate limit is separate from source compilation. This scope makes no changes to production schema, RLS, deployed site, or lifecycle server functions.
+
+
+### 21J. Second UI clarity sweep — small implementation on PR #9 (November 7, 2026)
+
+Status: IMPLEMENTED IN DRAFT BRANCH, NOT MERGED OR DEPLOYED. This pass is presentation-only, not competition logic, schema or security changes.
+
+- Shared search fields on registration and history pages now prompt for **name**, not an unsupported ID lookup.
+- Configuration navigation calls the actual general-settings screen **Match & Ranking Settings**, with an accurate description of penalty reasons, knockout overtime and standings tiebreak priority.
+- Dashboard route descriptions for events, run event and history destinations describe available behavior rather than generic or misleading promises. History navigation titles explicitly identify Event, Match and Fencer History.
+- Team lookup status selector distinguishes **active**, **archived**, **all** and **unassigned** in readable names. A live matching-team count and a named **More actions** menu improve row clarity. Empty results explain the search/filter mismatch.
+- Image Library shows **visible/matching image counts**, offers **Clear filters**, resets pagination when switching image status, says how many images Show more will reveal, and handles a missing archive/restore target with an actionable return link.
+- History shows a meaningful prompt before selecting an event or fencer and distinguishes empty data from search/scope filtering. Match details translate result status into plain language, and identify why archived/void bouts cannot be opened for editing.
+- Match History original call rows use local time, named competitors and human-readable scoring action types. The same-name fencer disambiguator is applied to Fencer History's selection; Match Log receives competitor names.
+- The live scoreboard's ambiguous **Manage** label is changed to **Admin Mode** (and the browser selectors updated). Match Report's progression disclosure, score-reconciliation text and CSV action now clearly describe what they do.
+
+Verification: change-aware CI must pass for final branch HEAD. Interactive browser/PostgreSQL tests and hosted preview are still separate release checks. Vercel build-rate limiting has previously blocked hosted preview. No PR merge, migration, or deployment is performed.
