@@ -184,7 +184,7 @@ export const configurationTiles: NavTile[] = [
 
 export const titles: Record<Route, string> = {
   "/": "Dashboard",
-  "/account": "Sign In",
+  "/account": "My Account",
   "/users": "Manage Users",
   "/fencers": "Manage Fencers",
   "/events": "Manage Events",
