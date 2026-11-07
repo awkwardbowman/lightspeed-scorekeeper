@@ -502,6 +502,7 @@ try {
     await affiliationFilter.fill("unmatched affiliation");
     await page.getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" });
+    await page.getByRole("status").filter({ hasText: "No records match your filters." }).waitFor();
     await affiliationFilter.fill("");
     await nameFilter.fill("");
     await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
