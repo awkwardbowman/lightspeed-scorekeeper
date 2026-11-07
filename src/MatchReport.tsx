@@ -8,7 +8,6 @@ export default function MatchReport({
   onEdit,
   onBack,
   onNew,
-  onExport,
   onCsv,
 }: {
   match: LiveMatch;
@@ -17,7 +16,6 @@ export default function MatchReport({
   onEdit: () => void;
   onBack: () => void;
   onNew: () => void;
-  onExport: () => void;
   onCsv: () => void;
 }) {
   const report = reportModel(operations, match.left_score, match.right_score);
@@ -238,12 +236,21 @@ export default function MatchReport({
           )}
         </section>
       </div>
-      <details>
-        <summary>Settings and Provenance</summary>
-        <pre>{JSON.stringify(match, null, 2)}</pre>
-      </details>
+      <section className="report-context" aria-label="Match settings">
+        <h3>Match Settings</h3>
+        <p>
+          {match.event_name || "Standalone Match"}
+          {match.round_name ? ` · ${match.round_name}` : ""}
+          {" · "}
+          {match.match_type === "knockout" ? "Knockout" : "Standard"}
+        </p>
+        <p>
+          Duration: {Math.round(match.duration_ms / 1000)} seconds
+          {" · "}Score to Win: {match.target_score ?? "No Target"}
+          {match.is_overtime ? " · Overtime enabled" : ""}
+        </p>
+      </section>
       <div className="button-row">
-        <button onClick={onExport}>Export Report</button>
         <button onClick={onCsv}>Export CSV</button>
       </div>
     </section>
