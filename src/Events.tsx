@@ -41,6 +41,10 @@ export function EventPicker({
         <option value="">Select an event</option>
         {events
           .filter((e) => archived || e.status !== "archived")
+          .sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+            a.id.localeCompare(b.id),
+          )
           .map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} · {e.status}
@@ -99,6 +103,10 @@ export function Registration({ eventId }: { eventId: string }) {
               !f.is_unregistered &&
               !f.is_archived &&
               f.display_name.toLowerCase().includes(search.toLowerCase()),
+          )
+          .sort((a, b) =>
+            a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+            a.id.localeCompare(b.id),
           )
           .map((f) => {
             const exists = r.data.some(
