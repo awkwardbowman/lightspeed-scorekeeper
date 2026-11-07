@@ -34,6 +34,15 @@ export function Intro({
     </div>
   );
 }
+/** Return navigation for read-only details and relationship screens. Forms use Cancel. */
+export function BackLink({ href }: { href: string }) {
+  return (
+    <nav className="page-back" aria-label="Return navigation">
+      <a href={href}>← Back</a>
+    </nav>
+  );
+}
+
 export function Notice({
   error,
   success,
