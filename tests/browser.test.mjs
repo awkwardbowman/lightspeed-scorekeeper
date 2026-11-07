@@ -473,14 +473,37 @@ try {
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
     await assertIdFirst();
+    // Fencer lookup filters are independent Name + Affiliation searches,
+    // followed by Status and Sort. Other entity lookups retain broad Search.
+    assert.deepEqual(
+      await page.locator(".fields > label").evaluateAll((labels) =>
+        labels.map((label) => label.firstChild?.textContent?.trim()),
+      ),
+      ["Name", "Affiliation", "Status", "Sort"],
+      "Fencer filters must be ordered Name, Affiliation, Status, Sort",
+    );
+    const nameFilter = page.getByRole("searchbox", { name: "Name", exact: true });
+    await nameFilter.fill("OwS");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await nameFilter.fill("ACADE");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor({ state: "hidden" }); // Affiliation text must not match Name.
+    await nameFilter.fill("fEnC");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
     // Affiliation is a case-insensitive substring search, not an exact dropdown.
     const affiliationFilter = page.getByRole("searchbox", { name: "Affiliation", exact: true });
     await affiliationFilter.fill("cAdE");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await nameFilter.fill("OTHER NAME");
+    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor({ state: "hidden" }); // Matching Affiliation cannot override Name.
+    await nameFilter.fill("fEnC");
     await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
     await affiliationFilter.fill("unmatched affiliation");
     await page.getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" });
     await affiliationFilter.fill("");
+    await nameFilter.fill("");
     await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
     // Notes stay in the editor/database, not in the Fencer lookup table.
     assert.equal(
