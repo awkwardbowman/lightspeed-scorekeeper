@@ -496,7 +496,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
           ) : (
             <p>Unknown page.</p>
           )}
-          <Notice error={a.status} />
+          <Notice error={a.error} success={a.status} />
           {mode === "edit" &&
             entity === "users" &&
             selected &&
@@ -713,7 +713,7 @@ function InvitationPolicy() {
           {p.data[0]?.invitations_paused ? "Resume" : "Pause"} invitations
         </button>
       )}
-      <Notice error={p.error || a.status} />
+      <Notice error={p.error || a.error} success={a.status} />
     </>
   );
 }
@@ -750,7 +750,7 @@ function EventStatus({
             </button>
           ))}
       </div>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </>
   );
 }
