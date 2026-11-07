@@ -1,11 +1,11 @@
 # PR #8 planning — UI consistency, management pages and match presentation
 
-Status: PR #8 PLANNING BRANCH; one low-risk code change committed (breadcrumb fix), the rest is a design draft. No implementation PR opened or deployment triggered. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
+Status: PR #8 PLANNING BRANCH; two isolated low-risk code fixes committed (breadcrumb navigation and duplicate management return links); the rest is a design draft. No implementation PR opened or deployment triggered. Expected next PR number is #8 because #7 is latest merged; verify numbering before opening. PR #4 closed without merge; PR #5, #6 and #7 merged.
 
 Canonical scope and acceptance criteria: [DESIGN.md §14](DESIGN.md) and [shared Google Doc](https://docs.google.com/document/d/1IvEPsjjLwE98B7_M6Qqg8PfcJ8aMCHCxpBAYFXsJW7k/edit).
 
 ## Proposed implementation scope
-1. Shared dark-navy / warm-amber theme tokens and unified Primary/Secondary/Quiet/Danger buttons; Title Case headings; single Cancel.
+1. Shared dark-navy / warm-amber theme tokens and unified Primary/Secondary/Quiet/Danger buttons; Title Case headings. Single Cancel (no duplicate Back to Lookup) on record management Create/Edit/Archive/Restore/Delete pages — IMPLEMENTED in `src/RecordPages.tsx` (commit `a53e55898d77`); styling changes are still pending.
 2. Responsive, full-width management and history filters/tables; ID-first order, right-aligned bordered action buttons; Users separate Email and Role; Fencers no Notes table field and partial Name/Affiliation search.
 3. Events date-only Start/End; dedicated Manage Teams top-level navigation; event-specific participant/roster links without mixing entity lookup and edits.
 4. Match Prep with Left/Right Fencer row and Settings group; preset selects locked Length, Score Target and Match Type; Custom clears/enables; remove Round/Bout; Start Match and Cancel.
