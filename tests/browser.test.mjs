@@ -810,12 +810,12 @@ try {
       document.querySelector(".admin-center .live-side.left .live-score")?.textContent?.trim() === "0",
     );
     assert.equal(
-      (await q("select left_score from public.\\"vMatchResults\\" where left_name='Ari'"))[0].left_score,
+      (await q(`select left_score from public."vMatchResults" where left_name='Ari'`))[0].left_score,
       0,
       "Nullify restores the persisted score",
     );
     assert.equal(
-      (await q("select count(*)::int n from public.\\"tMatchOperation\\" where kind='reverse'"))[0].n,
+      (await q(`select count(*)::int n from public."tMatchOperation" where kind='reverse'`))[0].n,
       1,
       "Nullify writes one immutable reversal",
     );
