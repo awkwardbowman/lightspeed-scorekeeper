@@ -162,6 +162,33 @@ export function DeleteButton({
     </>
   );
 }
+/** Summarize retained row audits without exposing raw payloads or UUIDs in the UI. */
+export function describeChanges(before: unknown, after: unknown): string {
+  const asRow = (v: unknown): Record<string, unknown> =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? v as Record<string, unknown>
+      : {};
+  const oldRow = asRow(before), newRow = asRow(after);
+  const labels: Record<string, string> = {
+    display_name: "Display name", name: "Name", email: "Email",
+    affiliation: "Affiliation", notes: "Notes", is_archived: "Archive status",
+    is_active: "Account status", team_color_hex: "Team color",
+    logo_image_asset_id: "Team logo", event_id: "Event assignment",
+    overtime_ms: "Overtime duration", tiebreakers: "Standings tiebreakers",
+    penalty_reasons: "Penalty reasons", key_mappings: "Keyboard shortcuts",
+    status: "Status", start_date: "Start date", end_date: "End date",
+    winner_side: "Winner", result_override: "Official result",
+    left_score: "Left score", right_score: "Right score",
+  };
+  const changed = [...new Set([...Object.keys(oldRow), ...Object.keys(newRow)])]
+    .filter((key) =>
+      !/^id$|_id$|_at$|_by$|revision$|version$/.test(key) &&
+      JSON.stringify(oldRow[key]) !== JSON.stringify(newRow[key]),
+    )
+    .map((key) => labels[key] ?? key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+  return changed.length ? `Changed: ${changed.join(", ")}` : "Change retained in audit history";
+}
+
 export function downloadJson(filename: string, value: unknown) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
