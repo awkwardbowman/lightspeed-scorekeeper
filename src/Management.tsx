@@ -8,7 +8,7 @@ export function Account() {
   const a = useAction(refresh);
   return (
     <>
-      <Intro title="My account">
+      <Intro title="My Account">
         {profile.email} · {profile.app_role}
       </Intro>
       <section className="card">
