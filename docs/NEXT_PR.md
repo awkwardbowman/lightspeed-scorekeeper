@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: large L1–L5 implementation prepared on `codex/event-phases`; local T3 regression passed; not deployed. See [DESIGN.md §22](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md). The small-management workstream remains separate. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
+Status: large L1–L5 implementation prepared in [PR #10](https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10) on `codex/event-phases`; local T3 regression passed; not deployed. See [DESIGN.md §22](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md). The small-management workstream remains separate. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
 
 ## Small / offloadable work
 

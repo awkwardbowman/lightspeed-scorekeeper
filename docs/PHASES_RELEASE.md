@@ -1,6 +1,6 @@
 # Event phases — prepared, not deployed
 
-The large §21 L1–L5 implementation is on `codex/event-phases`. Local T3 full regression passes. No hosted migration or production deployment has been performed. The small-management branch is separate and needs integration review where both change event navigation, history, scoring presentation or tests.
+The large §21 L1–L5 implementation is in [PR #10](https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10) on `codex/event-phases`. Local T3 full regression passes. No hosted migration or production deployment has been performed. The small-management branch is separate and needs integration review where both change event navigation, history, scoring presentation or tests.
 
 ## Rollout order
 

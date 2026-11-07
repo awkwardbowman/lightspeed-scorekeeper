@@ -606,7 +606,7 @@ R1–R3, R5–R6 and most of R8 are bounded improvements to consider in PR #9; R
 
 ## 22. Large event-phase implementation — November 7, 2026
 
-Status: L1–L5 implemented on `codex/event-phases`, locally verified, NOT DEPLOYED. Section 21 remains the approved requirements; this section supersedes its implementation-not-started status for the large work only. The separate small-management branch remains independent.
+Status: L1–L5 implemented in [PR #10](https://github.com/awkwardbowman/lightspeed-scorekeeper/pull/10) on `codex/event-phases`, locally verified, NOT DEPLOYED. Section 21 remains the approved requirements; this section supersedes its implementation-not-started status for the large work only. The separate small-management branch remains independent.
 
 - Manage Events now owns dedicated phase setup, many-to-many phase registration with seeds, preset assignment, manual pairings and server-generated round-robin/single-elimination brackets. Later phases and memberships can be added during an active event. A preset change updates safe unplayed fixtures while preserving played snapshots and blocking conflicting referee claims.
 - Run Event owns lifecycle controls and phase tiles: gray No Matches, blue Scheduled, orange In Progress, green Complete only after every eligible match is finalized. Phase detail shows read-only registrations, settings, standings, saved bracket and scoped matches, with next runnable fixture first. Links open the dedicated registration/generator screens and preserve return context.
