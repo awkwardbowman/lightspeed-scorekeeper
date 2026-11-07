@@ -145,6 +145,18 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
     assert.equal(new URL(page.url()).hash, `#${route}`, `Cancel failed: ${hash}`);
   }
 
+  // Cancel must also discard unsaved input, not just change the URL.
+  await navigate(`/fencers?mode=edit&id=${fixtures.fencerId}`);
+  const fencerName = page.getByLabel("Display name", { exact: true });
+  await fencerName.waitFor({ state: "visible" });
+  const originalName = await fencerName.inputValue();
+  await fencerName.fill("UNSAVED NAVIGATION TEST — DO NOT STORE");
+  await page.getByRole("link", { name: "Cancel", exact: true }).click();
+  await navigate(`/fencers?mode=edit&id=${fixtures.fencerId}`);
+  await fencerName.waitFor({ state: "visible" });
+  assert.equal(await fencerName.inputValue(), originalName,
+    "Cancel must not persist unsaved form edits");
+
   // Relationship page has only Back to lookup, not a duplicate Cancel.
   await navigate(`/events?mode=relationships&id=${fixtures.eventId}`);
   await page.getByRole("link", { name: /Back to lookup/i }).click();
