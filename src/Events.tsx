@@ -320,7 +320,7 @@ export function RunEvent() {
               )}
               <p>
                 {registered.length} registered fencers.{" "}
-                <a href={`#/events?mode=relationships&id=${encodeURIComponent(e.id)}`}>
+                <a href={`#/events?mode=relationships&id=${encodeURIComponent(e.id)}&return=run-event`}>
                   Manage Event Registrations
                 </a>
               </p>
