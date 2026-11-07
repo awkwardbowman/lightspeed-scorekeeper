@@ -298,6 +298,8 @@ export function ImagePicker({
             assets={assets.data.filter(
               (x) => !x.is_archived || x.id === selected,
             )}
+            loading={assets.loading}
+            loadError={assets.error}
             onSelect={(x) => onSelect(x.id)}
           />
           <Notice error={assets.error} loading={assets.loading} />
@@ -310,10 +312,14 @@ function AssetGallery({
   assets,
   onSelect,
   onArchive,
+  loading = false,
+  loadError = "",
 }: {
   assets: ImageAsset[];
   onSelect?: (asset: ImageAsset) => void;
   onArchive?: (asset: ImageAsset) => void;
+  loading?: boolean;
+  loadError?: string;
 }) {
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("active"),
@@ -377,7 +383,13 @@ function AssetGallery({
           </article>
         ))}
       </div>
-      {!filtered.length && <p>No images match.</p>}
+      {!loading && !loadError && !filtered.length && (
+        <p role="status">
+          {assets.length === 0
+            ? "No images in this library yet."
+            : "No images match your filters."}
+        </p>
+      )}
       {filtered.length > limit && (
         <button type="button" onClick={() => setLimit((n) => n + 24)}>
           Show more images
@@ -397,9 +409,11 @@ export default function ImageLibrary() {
       <Intro
         title={
           mode === "upload"
-            ? "Upload image"
+            ? "Upload Image"
             : mode === "archive"
-              ? "Confirm image archive"
+              ? selected?.is_archived
+                ? "Confirm Image Restore"
+                : "Confirm Image Archive"
               : "Image Library"
         }
       />
@@ -418,8 +432,9 @@ export default function ImageLibrary() {
           <ImagePreview asset={selected} alt={selected.display_name} />
           <h3>{selected.display_name}</h3>
           <p>
-            Archived images stay available in existing teams and history. Their
-            stored files are retained.
+            {selected.is_archived
+              ? "Restore this image to the active library so it can be selected for teams again."
+              : "Archiving hides this image from new selections. Existing teams and history keep their images, and the stored file is retained."}
           </p>
           <button
             disabled={a.busy}
@@ -444,6 +459,8 @@ export default function ImageLibrary() {
           </a>
           <AssetGallery
             assets={assets.data}
+            loading={assets.loading}
+            loadError={assets.error}
             onArchive={(x) => {
               window.location.hash = `/configuration/team-images?mode=archive&id=${x.id}`;
             }}
