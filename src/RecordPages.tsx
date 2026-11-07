@@ -247,18 +247,12 @@ export function RecordPage({ entity }: { entity: Entity }) {
             {entity === "fencers" && (
               <label>
                 Affiliation
-                <select
+                <input
+                  type="search"
+                  placeholder="Search affiliations"
                   value={affiliation}
                   onChange={(e) => setAffiliation(e.target.value)}
-                >
-                  <option value="">All affiliations</option>
-                  {[...new Set(r.data.map((x) => String(x.affiliation ?? "")))]
-                    .filter(Boolean)
-                    .sort()
-                    .map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                </select>
+                />
               </label>
             )}
           </div>
@@ -282,7 +276,10 @@ export function RecordPage({ entity }: { entity: Entity }) {
                     (x) =>
                       (status === "all" ||
                         inactive(x) === (status === "inactive")) &&
-                      (!affiliation || x.affiliation === affiliation) &&
+                      (!affiliation.trim() ||
+                        String(x.affiliation ?? "")
+                          .toLowerCase()
+                          .includes(affiliation.trim().toLowerCase())) &&
                       `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
                         .toLowerCase()
                         .includes(search.toLowerCase()),
