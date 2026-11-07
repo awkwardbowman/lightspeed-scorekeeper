@@ -148,9 +148,13 @@ export default function Teams() {
             >
               New team
             </a>
-            <a href={teamHref("clone", undefined, returnEvent)}>
-              Clone previous team
-            </a>
+            {mode === "clone" ? (
+              <a href={back}>Cancel</a>
+            ) : (
+              <a href={teamHref("clone", undefined, returnEvent)}>
+                Clone previous team
+              </a>
+            )}
             {returnEvent && <a href={back}>Back to event</a>}
           </div>
           <div className="form-grid">
@@ -267,7 +271,9 @@ export default function Teams() {
         />
       ) : selected ? (
         <section className="card">
-          <a href={back}>← Back to lookup</a>
+          {(mode === "roster" || mode === "history") && (
+            <a href={back}>← Back to lookup</a>
+          )}
           <h3>{selected.name}</h3>
           {mode === "roster" ? (
             <Roster team={selected} onChange={teams.reload} />
@@ -371,7 +377,6 @@ function TeamEditor({
   } as TeamInstance;
   return (
     <section className="card">
-      <a href={back}>← Back to lookup</a>
       <form
         onSubmit={(e) => {
           e.preventDefault();
