@@ -67,7 +67,8 @@ export async function auditDeclaredControls() {
       const tag = jsxTag(node, tree);
       if (tag === "button") {
         counts.buttons++;
-        if (!hasAttribute(node, "onClick") && !formAncestor(node, tree))
+        if (!hasAttribute(node, "onClick") && !formAncestor(node, tree) &&
+            !node.attributes.properties.some((p) => ts.isJsxAttribute(p) && p.name.text === "disabled" && !p.initializer))
           issues.push(
             `${name}:${tree.getLineAndCharacterOfPosition(node.pos).line + 1}: button has no handler or submit form`,
           );

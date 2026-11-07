@@ -1196,7 +1196,7 @@ try {
     .getByRole("button", { name: "Assign Browser cloned team", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Available unassigned teams", exact: true })
+    .getByRole("heading", { name: /^Available unregistered teams \(\d+\)$/ })
     .waitFor();
   await page.getByText("Saved.", { exact: true }).waitFor();
   assert.equal(

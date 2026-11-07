@@ -29,6 +29,21 @@ type Pending = {
   revision: number;
 };
 const key = (user: string) => `lightspeed-live:v2:${user}`;
+// Keep a controller's identity through a reload, scoped to this account and tab.
+// This is session storage, never shared account-wide through localStorage.
+function refereeToken(user: string) {
+  const storageKey = `lightspeed-referee:v1:${user}`;
+  try {
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) return existing;
+    const created = uid();
+    sessionStorage.setItem(storageKey, created);
+    return created;
+  } catch {
+    return uid();
+  }
+}
+
 function stored(user: string): {
   match: LiveMatch | null;
   pending: Pending | null;
@@ -59,7 +74,7 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
   pendingRef.current = pending;
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const token = useRef(uid());
+  const token = useRef(refereeToken(profile.id));
   const revision = useRef<number | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
