@@ -122,7 +122,7 @@ export function Search({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search by name or ID"
+        placeholder="Search by name"
       />
     </label>
   );
