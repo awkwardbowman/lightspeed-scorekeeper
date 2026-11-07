@@ -794,6 +794,11 @@ try {
       true,
     );
     await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("heading", { name: "Match Log", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Previous Cards", exact: true }).waitFor();
+    assert.equal(await page.locator("details.match-rail").count(), 0, "Admin side panels cannot collapse");
+    assert.equal(await page.locator(".log-rail pre").count(), 0, "Live log cannot show JSON payloads");
+    assert.equal(await page.getByRole("button", { name: /Nullify log entry:/ }).count(), 1, "Saved scoring calls must offer Nullify");
     await page
       .getByRole("button", { name: "Increase Left score", exact: true })
       .click();
