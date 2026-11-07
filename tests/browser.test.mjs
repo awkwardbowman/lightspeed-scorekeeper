@@ -636,6 +636,9 @@ try {
     assert.equal(await page.getByLabel("Email", { exact: true }).count(), 1);
     assert.equal(await page.locator("input[type=password]").count(), 0);
     await page.getByRole("link", { name: "Cancel", exact: true }).click();
+    await page.goto("http://127.0.0.1:5187/#/");
+    await page.getByRole("link", { name: "Manage Match Presets" }).click();
+    assert.equal(new URL(page.url()).hash, "#/presets");
     await page.goto(`http://127.0.0.1:5187/#/users?mode=edit&id=${manager}`);
     const dangerZone = page.getByRole("region", { name: "Danger Zone" });
     await dangerZone.getByRole("link", { name: "Delete Account Access…" }).click();
@@ -1012,6 +1015,14 @@ try {
       ])
     )[0].is_archived,
     true,
+  );
+  await page.goto(`http://127.0.0.1:5187/#/configuration/team-images?mode=archive&id=${image.id}`);
+  await page.getByRole("heading", { name: "Confirm Image Restore" }).waitFor();
+  await page.getByRole("link", { name: "Cancel", exact: true }).click();
+  assert.equal(
+    (await q('select is_archived from public."tImageAsset" where id=$1', [image.id]))[0].is_archived,
+    true,
+    "Cancelling image restore must preserve archived status",
   );
   assert.equal(imageObjects.size, 1);
   assert.deepEqual(errors, []);
