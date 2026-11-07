@@ -119,6 +119,7 @@ export default function Teams() {
     );
   return (
     <div className="team-pages">
+      {((mode === "roster" || mode === "history") || (returnEvent && mode === "lookup")) && <BackLink href={back} />}
       <Intro
         title={
           mode === "create"
@@ -139,7 +140,6 @@ export default function Teams() {
         Each event entry has its own roster and appearance. Clone a previous
         team to continue its history.
       </Intro>
-      {((mode === "roster" || mode === "history") || (returnEvent && mode === "lookup")) && <BackLink href={back} />}
       {notice && (
         <p role="status" className="notice-feedback notice-success">
           {notice}
