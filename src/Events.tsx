@@ -11,7 +11,7 @@ import {
   type MatchRow,
 } from "./data";
 import { bracketGraph } from "./tournament";
-import { ArchiveFilter, BackLink, Intro, Notice, Search, useAction, useRows } from "./ui";
+import { ArchiveFilter, BackLink, competitorLabel, Intro, Notice, Search, useAction, useRows } from "./ui";
 export function useEventSelection() {
   const r = useRows<EventRecord>("tEvent");
   const [id, setIdValue] = useState(
@@ -86,17 +86,6 @@ export function StandingsTable({ data }: { data: Standing[] }) {
     </div>
   );
 }
-/** Distinguish same-named fencers without placing internal IDs in normal selections. */
-export function competitorLabel(fencer: Fencer, pool: Fencer[]): string {
-  const label = fencer.display_name + (fencer.affiliation ? ` · ${fencer.affiliation}` : "");
-  const duplicates = pool.filter((f) =>
-    f.display_name.trim().toLocaleLowerCase() === fencer.display_name.trim().toLocaleLowerCase() &&
-    f.affiliation.trim().toLocaleLowerCase() === fencer.affiliation.trim().toLocaleLowerCase(),
-  ).sort((a, b) => a.id.localeCompare(b.id));
-  return duplicates.length > 1
-    ? `${label} · Entry ${duplicates.findIndex((f) => f.id === fencer.id) + 1}`
-    : label;
-}
 export function Registration({ eventId }: { eventId: string }) {
   const f = useRows<Fencer>("tFencer");
   const allFencers = f.data;
@@ -138,7 +127,8 @@ export function Registration({ eventId }: { eventId: string }) {
                   type="checkbox"
                   checked={exists}
                   disabled={a.busy || r.loading || f.is_archived}
-                  onChange={() =>
+                  onChange={() => {
+                    if (exists && !window.confirm(`Unregister ${f.display_name} from this event? Removing someone who has already competed may affect live standings. Do not remove played entrants until the post-match registration safeguards are implemented.`)) return;
                     void a.run(async () => {
                       const q = exists
                         ? db()
@@ -151,8 +141,8 @@ export function Registration({ eventId }: { eventId: string }) {
                             .insert({ event_id: eventId, fencer_id: f.id });
                       const { error } = await q;
                       if (error) throw error;
-                    })
-                  }
+                    });
+                  }}
                 />
                 {competitorLabel(f, allFencers)} {f.is_archived && <small>(Archived · historical registration, read-only)</small>}
               </label>
