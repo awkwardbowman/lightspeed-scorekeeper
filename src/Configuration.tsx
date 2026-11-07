@@ -64,7 +64,7 @@ export default function Configuration({
       <Intro
         title={
           kind === "general"
-            ? "Ranking Configuration"
+            ? "Match & Ranking Settings"
             : kind === "key-mappings"
               ? "Keyboard Mappings"
               : "Team Images"
@@ -77,7 +77,9 @@ export default function Configuration({
         <fieldset disabled={r.loading || a.busy || Boolean(r.error)}>
           {kind === "general" && (
             <>
-              <h3>Card penalty reasons</h3>
+              <h3>Match rules</h3>
+              <p>Card reasons appear in the referee’s penalty picker. The overtime limit applies to knockout matches.</p>
+              <h4>Card penalty reasons</h4>
               <label>
                 Selectable reason tiles (one per line)
                 <textarea
