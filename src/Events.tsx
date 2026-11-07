@@ -131,7 +131,7 @@ export function Registration({ eventId }: { eventId: string }) {
             );
           })}
       </div>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </section>
   );
 }
@@ -620,7 +620,7 @@ export function RunEvent() {
                   Schedule match
                 </button>
               </div>
-              <Notice error={a.status} />
+              <Notice error={a.error} success={a.status} />
             </section>
             <section className="card">
               <h3>Matches & bracket generations</h3>
