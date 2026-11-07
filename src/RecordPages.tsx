@@ -144,8 +144,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const { profile } = useAccount();
   const r = useRows<Row>(def.table);
   const presets = useRows<Preset>("tMatchPreset");
-  const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
-  const eventTeams = useRows<{ id: string; event_id: string | null; is_archived: boolean }>("vTeamInstances");
+  const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>("tEventFencer", entity === "events");
+  const eventTeams = useRows<{ id: string; event_id: string | null; is_archived: boolean }>("vTeamInstances", entity === "events");
   const [params, setParams] = useState(query);
   useEffect(() => {
     const change = () => setParams(query());
