@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { db, rpc, type ImageAsset } from "./data";
+import { db, message, rpc, type ImageAsset } from "./data";
 import { Intro, Notice, useAction, useRows } from "./ui";
 import { processImage, type ProcessedImage } from "./imageProcessing";
 
@@ -99,22 +99,53 @@ export function UploadImage({
     [name, setName] = useState(""),
     [quality, setQuality] = useState(0.82),
     [bound, setBound] = useState(512);
-  const [processed, setProcessed] = useState<ProcessedImage>(),
+  const [prepared, setPrepared] = useState<{
+      image: ProcessedImage;
+      file: File;
+      quality: number;
+      bound: number;
+    }>(),
+    [processing, setProcessing] = useState(false),
+    [processingError, setProcessingError] = useState(""),
     [uploadId, setUploadId] = useState(() => crypto.randomUUID());
-  const a = useAction(),
-    preview = useBlobUrl(processed?.blob);
+  const a = useAction();
+  // Never allow uploading a preview created with a previous file or setting.
+  const processed =
+    prepared?.file === file &&
+    prepared.quality === quality &&
+    prepared.bound === bound
+      ? prepared.image
+      : undefined;
+  const preview = useBlobUrl(processed?.blob);
   const sequence = useRef(0);
-  async function prepare(next: File, q = quality, b = bound) {
+  useEffect(() => {
     const seq = ++sequence.current;
-    setProcessed(undefined);
-    await a.run(async () => {
-      const result = await processImage(next, b, q);
-      if (seq === sequence.current) {
-        setProcessed(result);
-        setUploadId(crypto.randomUUID());
-      }
-    });
-  }
+    setProcessing(Boolean(file));
+    setProcessingError("");
+    if (!file) {
+      setPrepared(undefined);
+      return;
+    }
+    // Group rapid setting changes so only the latest optimization is used.
+    const timer = window.setTimeout(() => {
+      void processImage(file, bound, quality)
+        .then((image) => {
+          if (seq !== sequence.current) return;
+          setPrepared({ image, file, bound, quality });
+          setUploadId(crypto.randomUUID());
+        })
+        .catch((error) => {
+          if (seq === sequence.current) setProcessingError(message(error));
+        })
+        .finally(() => {
+          if (seq === sequence.current) setProcessing(false);
+        });
+    }, 120);
+    return () => {
+      ++sequence.current;
+      window.clearTimeout(timer);
+    };
+  }, [file, bound, quality]);
   return (
     <fieldset disabled={a.busy} className="image-upload">
       <legend>Upload new image</legend>
@@ -141,7 +172,6 @@ export function UploadImage({
             if (f) {
               setFile(f);
               setName(f.name.replace(/\.[^.]+$/, ""));
-              void prepare(f);
             }
           }}
         />
@@ -151,10 +181,7 @@ export function UploadImage({
           Maximum size
           <select
             value={bound}
-            onChange={(e) => {
-              setBound(Number(e.target.value));
-              setProcessed(undefined);
-            }}
+            onChange={(e) => setBound(Number(e.target.value))}
           >
             {[512, 384, 256].map((n) => (
               <option key={n} value={n}>
@@ -167,10 +194,7 @@ export function UploadImage({
           Quality
           <select
             value={quality}
-            onChange={(e) => {
-              setQuality(Number(e.target.value));
-              setProcessed(undefined);
-            }}
+            onChange={(e) => setQuality(Number(e.target.value))}
           >
             {[0.7, 0.82, 0.9].map((n) => (
               <option key={n} value={n}>
@@ -179,13 +203,15 @@ export function UploadImage({
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          disabled={!file}
-          onClick={() => file && void prepare(file)}
-        >
-          Update preview
-        </button>
+        <p role="status" className="image-preview-status">
+          {processing
+            ? "Optimizing image…"
+            : processed
+              ? "Preview automatically updated."
+              : file
+                ? "Preview unavailable. Choose another image or setting."
+                : "Choose an image to see its optimized preview."}
+        </p>
       </div>
       {processed && (
         <>
@@ -204,7 +230,7 @@ export function UploadImage({
         <button
           type="button"
           className="primary"
-          disabled={!processed || !name.trim()}
+          disabled={a.busy || processing || !processed || !name.trim()}
           onClick={() =>
             void a.run(async () => {
               const { data, error } = await db().functions.invoke(
@@ -232,7 +258,7 @@ export function UploadImage({
           Cancel upload
         </button>
       </div>
-      <Notice error={a.status === "Saved." ? "" : a.status} />
+      <Notice error={processingError || a.error} success={a.status} />
     </fieldset>
   );
 }
