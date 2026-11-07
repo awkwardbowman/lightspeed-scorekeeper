@@ -4,7 +4,7 @@ import { manage, rpc, write, type EventRecord, type Preset } from "./data";
 import { BackLink, Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
 import { EventTeamAssignments } from "./Teams";
 import { CopyId } from "./Images";
-import { EventStatus, Registration } from "./Events";
+import { Registration } from "./Events";
 
 type Entity = "fencers" | "presets" | "users" | "events" | "teams";
 type Row = { id: string; [key: string]: unknown };
