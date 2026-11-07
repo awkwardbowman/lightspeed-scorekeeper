@@ -181,7 +181,7 @@ export default function Teams() {
               />
             </label>
             <label>
-              Team status
+              Status / assignment
               <select
                 value={filter}
                 onChange={(e) => {
@@ -191,7 +191,7 @@ export default function Teams() {
               >
                 {["active", "archived", "all", "unassigned"].map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === "unassigned" ? "Unassigned to event" : s === "all" ? "All teams" : s === "active" ? "Active teams" : "Archived teams"}
                   </option>
                 ))}
               </select>
@@ -211,6 +211,7 @@ export default function Teams() {
               The clone gets fresh membership records for active fencers only.
             </p>
           )}
+          <p role="status">{teams.loading ? "Loading teams…" : `Showing ${list.length} of ${teams.data.length} teams`}</p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -246,7 +247,7 @@ export default function Teams() {
                             <a href={teamHref("edit", t.id, returnEvent)}>Edit</a>
                             <a href={teamHref("roster", t.id, returnEvent)}>Roster</a>
                             <details className="team-more">
-                              <summary>More</summary>
+                              <summary aria-label={`More actions for ${t.name}`}>More actions</summary>
                               <a href={teamHref("clone", t.id, returnEvent)}>Clone</a>
                               <a href={teamHref("history", t.id, returnEvent)}>History</a>
                               <a
@@ -271,8 +272,8 @@ export default function Teams() {
           {!teams.loading && !teams.error && !list.length && (
             <p role="status">
               {teams.data.length === 0
-                ? "No teams yet."
-                : "No teams match your filters."}
+                ? "No teams yet. Create a team to get started."
+                : "No teams match the current search or status filter."}
             </p>
           )}
         </section>
