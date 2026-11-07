@@ -51,7 +51,7 @@ export const dashboardTiles: NavTile[] = [
   {
     route: "/events",
     title: "Manage Events",
-    description: "Create events and manage the teams in each event.",
+    description: "Create events, configure details, and register fencers or teams.",
     icon: "▦",
     status: "planned",
   },
@@ -73,7 +73,7 @@ export const dashboardTiles: NavTile[] = [
     route: "/run-event",
     title: "Run Event",
     description:
-      "Open an event, review standings, run bouts, and build a bracket.",
+      "Manage event status, review standings, and open scheduled matches.",
     icon: "⚑",
     status: "planned",
   },
@@ -137,22 +137,22 @@ export const runEventTiles: NavTile[] = [
 export const historyTiles: NavTile[] = [
   {
     route: "/history/events",
-    title: "View Event",
-    description: "Find an event and drill into teams, matches, and results.",
+    title: "Event History",
+    description: "Review past events, team rosters, matches, and standings.",
     icon: "▦",
     status: "planned",
   },
   {
     route: "/history/matches",
-    title: "View Match",
-    description: "Find a bout and review its score and individual calls.",
+    title: "Match History",
+    description: "Review match scores, scoring calls, cards, and corrections.",
     icon: "⚔",
     status: "planned",
   },
   {
     route: "/history/fencers",
-    title: "View Fencer",
-    description: "Select a fencer to browse their match history.",
+    title: "Fencer History",
+    description: "Browse a fencer’s scoring statistics and previous matches.",
     icon: "♟",
     status: "planned",
   },
@@ -175,8 +175,8 @@ export const configurationTiles: NavTile[] = [
   },
   {
     route: "/configuration/general",
-    title: "General Settings",
-    description: "Additional options as the scorekeeper expands.",
+    title: "Match & Ranking Settings",
+    description: "Set penalty reasons, overtime duration, and standings tiebreakers."
     icon: "⚙",
     status: "planned",
   },
@@ -204,7 +204,7 @@ export const titles: Record<Route, string> = {
   "/configuration": "Configuration",
   "/configuration/team-images": "Image Library",
   "/configuration/key-mappings": "Key Mappings",
-  "/configuration/general": "General Settings",
+  "/configuration/general": "Match & Ranking Settings",
 };
 
 const routeSet: ReadonlySet<string> = new Set(ALL_ROUTES);
