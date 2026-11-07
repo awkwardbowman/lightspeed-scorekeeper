@@ -560,7 +560,23 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
               <Dialog
                 title="Manage match"
                 onClose={() => {
-                  if (!admin && !card) setManage(false);
+                  if (card) {
+                    setCard(false);
+                    return;
+                  }
+                  if (unavailable) {
+                    setError("Resolve the pending save before closing Match Management.");
+                    return;
+                  }
+                  if (
+                    admin &&
+                    !window.confirm(
+                      "Leave Admin Mode and discard any unapplied score, timer, target, or result changes?",
+                    )
+                  )
+                    return;
+                  setAdmin(false);
+                  setManage(false);
                 }}
               >
                 {!card && recoveryControls}
