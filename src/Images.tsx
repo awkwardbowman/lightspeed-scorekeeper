@@ -324,11 +324,16 @@ function AssetGallery({
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("active"),
     [limit, setLimit] = useState(24);
-  const filtered = assets.filter(
-    (x) =>
-      (filter === "all" || x.is_archived === (filter === "archived")) &&
-      `${x.display_name} ${x.id}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = assets
+    .filter(
+      (x) =>
+        (filter === "all" || x.is_archived === (filter === "archived")) &&
+        `${x.display_name} ${x.id}`.toLowerCase().includes(search.toLowerCase()),
+    )
+    .sort((a, b) =>
+      a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+      a.id.localeCompare(b.id),
+    );
   return (
     <>
       <div className="form-grid">
