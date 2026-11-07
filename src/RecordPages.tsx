@@ -371,7 +371,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                           )}
                           {(entity === "events" || entity === "teams") && (
                             <a href={href("relationships", x.id)}>
-                              Registration / roster
+                              {x.competition_format === "team" ? "Team Assignments" : "Registrations"}
                             </a>
                           )}
                         </div>
