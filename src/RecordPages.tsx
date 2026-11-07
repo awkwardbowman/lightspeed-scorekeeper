@@ -183,6 +183,15 @@ export function RecordPage({ entity }: { entity: Entity }) {
       : `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
           .toLowerCase()
           .includes(search.toLowerCase()));
+  const totalCount = r.data.filter(allowed).length;
+  const matchingCount = r.data.filter(allowed).filter(matchesFilters).length;
+  const filtersChanged = Boolean(search || affiliation) || status !== "active" || sort !== "name";
+  const clearFilters = () => {
+    setSearch("");
+    setAffiliation("");
+    setStatus("active");
+    setSort("name");
+  };
   const a = useAction(r.reload);
   async function done(action: () => Promise<unknown>) {
     if (await a.run(action)) {
@@ -250,7 +259,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 onChange={(e) => setStatus(e.target.value)}
               >
                 <option value="active">Active</option>
-                <option value="inactive">Archived / disabled</option>
+                <option value="inactive">{entity === "users" ? "Disabled" : "Archived"}</option>
                 <option value="all">All</option>
               </select>
             </label>
@@ -266,6 +275,16 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 )}
               </select>
             </label>
+          </div>
+          <div className="record-result-summary">
+            <span role="status">
+              {r.loading ? "Loading records…" : `Showing ${matchingCount} of ${totalCount} records`}
+            </span>
+            {filtersChanged && (
+              <button type="button" className="subtle" onClick={clearFilters}>
+                Clear Filters
+              </button>
+            )}
           </div>
           <div className="table-wrap">
             <table>
@@ -311,7 +330,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                       {entity === "users" ? (
                         <>
                           <td>{String(x.email ?? "")}</td>
-                          <td>{String(x.app_role ?? "")}</td>
+                          <td>{String(x.app_role ?? "").replace(/^./, (letter) => letter.toUpperCase())}</td>
                         </>
                       ) : (
                         <td>
@@ -362,10 +381,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
               </tbody>
             </table>
           </div>
-          {!r.loading && !r.error &&
-            r.data.filter(allowed).filter(matchesFilters).length === 0 && (
+          {!r.loading && !r.error && matchingCount === 0 && (
               <p role="status">
-                {r.data.filter(allowed).length === 0
+                {totalCount === 0
                   ? "No records yet."
                   : "No records match your filters."}
               </p>
