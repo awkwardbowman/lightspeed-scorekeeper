@@ -165,6 +165,11 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   // Team source picker must have a working Cancel, not a self-referential
   // "Clone previous team" link. Team editor, clone, archive, and history exits.
   await navigate("/events/teams?mode=clone");
+  assert.equal(
+    await page.getByRole("link", { name: "Clone previous team", exact: true }).count(),
+    0,
+    "Clone-source screen must not link to itself",
+  );
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
   assert.equal(new URL(page.url()).hash, "#/events/teams");
   for (const mode of ["create", "edit", "clone", "archive", "restore"]) {
