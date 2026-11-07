@@ -133,13 +133,13 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const selectedPhases = phases.data.filter((p) => p.event_id === id);
   return (
     <>
+      <BackLink href="#/history" />
       <Intro
         title={`${kind === "events" ? "Event" : kind === "fencers" ? "Fencer" : "Match"} History`}
       >
         Search shared results, inspect calls and corrections, and reveal
         archived generations when needed.
       </Intro>
-      <BackLink href="#/history" />
       <Notice
         error={
           events.error ||
