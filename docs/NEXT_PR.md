@@ -15,7 +15,7 @@ Status: design approved; small management/Admin UX work in progress on `feat/sco
 | S7 | All / Registered / Unregistered registration filters | Relative to selected event; phase variant depends on L1 |
 | S8 | Run Event action on event-table rows; lifecycle controls in Run Event | Remove execution link and Active/Completed controls from registration/setup screens |
 | S9 | Admin Mode side rails permanently visible | Match Log and Previous Cards panels never collapse; responsive screens stack them visibly |
-| S10 | No raw JSON in ordinary scoring, Match Report or History views | Human-readable action, points, participants, time, settings and status only; diagnostic JSON belongs in separate deep Admin tools |
+| S10 | No raw JSON in ordinary scoring, Match Report, History or Configuration views | Human-readable action, points, participants, time, settings and status only; diagnostic JSON belongs in separate deep Admin tools |
 | S11 | Nullify saved scoring log entries from Admin Mode | Clear per-entry Nullify with confirmation, permission/referee protection and immutable reversing audit entry; never delete original records |
 
 
