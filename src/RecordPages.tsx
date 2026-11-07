@@ -221,9 +221,11 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const mayEdit = (x?: Row) =>
     entity !== "users" ||
     (profile.app_role === "admin" && x?.app_role !== "admin" && !x?.is_deleted);
-  const backHref = mode === "relationships" && params.get("return") === "detail"
-    ? href("detail", id)
-    : `#${base}`;
+  const backHref = mode === "relationships" && params.get("return") === "run-event"
+    ? "#/run-event"
+    : mode === "relationships" && params.get("return") === "detail"
+      ? href("detail", id)
+      : `#${base}`;
   const title =
     mode === "delete"
       ? "Confirm delete user access"
