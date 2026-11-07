@@ -188,6 +188,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     (archived || !f.is_archived) &&
                     f.display_name.toLowerCase().includes(search.toLowerCase()),
                 )
+                .sort((a, b) =>
+                  a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+                  a.id.localeCompare(b.id),
+                )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.display_name} · {f.id.slice(0, 8)}
