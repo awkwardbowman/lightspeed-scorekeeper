@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: design approved, implementation not started. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
+Status: design approved; small management/Admin UX work in progress on `feat/scorekeeper-small-management-ux`, not yet merged or deployed. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
 
 ## Small / offloadable work
 
@@ -14,8 +14,12 @@ Status: design approved, implementation not started. PR #8 is released; see [DES
 | S6 | Registered fencer/team count on event rows | Event registrants, not summed phase memberships |
 | S7 | All / Registered / Unregistered registration filters | Relative to selected event; phase variant depends on L1 |
 | S8 | Run Event action on event-table rows; lifecycle controls in Run Event | Remove execution link and Active/Completed controls from registration/setup screens |
+| S9 | Admin Mode side rails permanently visible | Match Log and Previous Cards panels never collapse; responsive screens stack them visibly |
+| S10 | No raw JSON in live Admin Mode | Human-readable action, points, participant, time, status only; any future diagnostic JSON belongs in separate deep Admin tools |
+| S11 | Nullify saved scoring log entries from Admin Mode | Clear per-entry Nullify with confirmation, permission/referee protection and immutable reversing audit entry; never delete original records |
 
-S1, S5 and S6 can be implemented independently. S2–S4 touch shared UI and should coordinate. S7–S8 need to preserve the larger phase navigation contract. Small does not imply new permission or competition-rule design.
+
+S1, S5, S6, and S9–S11 can be implemented independently. S2–S4 touch shared UI and should coordinate. S7–S8 need to preserve the larger phase navigation contract. Nullification uses the existing reversal command only for scoring calls, cards and score-delta corrections; timer, target, and outcome correction flows remain deliberate Admin controls pending any separately scoped inverse command. Small does not imply new permission or competition-rule design.
 
 ## Larger coordinated work
 
@@ -39,4 +43,4 @@ L1 establishes the contract for L2–L4. L2's authoritative fixtures/sequence/ge
 
 ## Verification and release
 
-Documentation only. No application changes, migrations or deployment are performed by this update. Small UI work needs focused validation; phase schema/scoring/advancement changes require T3 full regression plus appropriate hosted T4 acceptance. Keep existing event snapshots, auth/RLS, audit, idempotency and referee controls intact.
+This checklist also tracks the in-progress feature branch. No production migration or deployment is authorized by the checklist itself. The UI work needs focused validation, including visible non-collapsible Admin panels, no displayed JSON, successful audited Nullify and rejection of duplicate/stale reversals; phase schema/scoring/advancement changes require T3 full regression plus appropriate hosted T4 acceptance. Keep existing event snapshots, auth/RLS, audit, idempotency and referee controls intact.
