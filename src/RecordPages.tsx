@@ -214,13 +214,24 @@ export function RecordPage({ entity }: { entity: Entity }) {
           {entity === "users" && <InvitationPolicy />}
           <div className="fields">
             <label>
-              Search
+              {entity === "fencers" ? "Name" : "Search"}
               <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
+            {entity === "fencers" && (
+              <label>
+                Affiliation
+                <input
+                  type="search"
+                  placeholder="Search affiliations"
+                  value={affiliation}
+                  onChange={(e) => setAffiliation(e.target.value)}
+                />
+              </label>
+            )}
             <label>
               Status
               <select
@@ -244,17 +255,6 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 )}
               </select>
             </label>
-            {entity === "fencers" && (
-              <label>
-                Affiliation
-                <input
-                  type="search"
-                  placeholder="Search affiliations"
-                  value={affiliation}
-                  onChange={(e) => setAffiliation(e.target.value)}
-                />
-              </label>
-            )}
           </div>
           <div className="table-wrap">
             <table>
@@ -280,9 +280,13 @@ export function RecordPage({ entity }: { entity: Entity }) {
                         String(x.affiliation ?? "")
                           .toLowerCase()
                           .includes(affiliation.trim().toLowerCase())) &&
-                      `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
-                        .toLowerCase()
-                        .includes(search.toLowerCase()),
+                      (entity === "fencers"
+                        ? name(x)
+                            .toLowerCase()
+                            .includes(search.trim().toLowerCase())
+                        : `${name(x)} ${x.id} ${x.email ?? ""} ${x.affiliation ?? ""}`
+                            .toLowerCase()
+                            .includes(search.toLowerCase())),
                   )
                   .sort((x, y) =>
                     sort === "id"
