@@ -32,7 +32,7 @@ export function Account() {
             Save name
           </button>
         </form>
-        <Notice error={a.status} />
+        <Notice error={a.error} success={a.status} />
         <h3>Change password</h3>
         <PasswordForm onDone={refresh} />
         <button className="subtle" onClick={() => void db().auth.signOut()}>
