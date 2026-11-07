@@ -768,9 +768,30 @@ try {
       await page.locator(".live-side.left .live-score").innerText(),
       "4",
     );
+    // Abandon exits the fullscreen scoreboard; it never voids the saved bout.
+    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    const abandon = page.getByRole("button", { name: "Abandon Match", exact: true });
+    await abandon.waitFor({ state: "visible" });
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await abandon.click();
+    assert.equal(await page.locator("dialog[open]").count(), 1,
+      "Declining Abandon Match must keep the current Admin Mode");
+    page.once("dialog", (dialog) => dialog.accept());
+    await abandon.click();
+    await page.waitForURL("**/#/");
+    const savedBout = (
+      await q("select id,is_void,finalized_at,left_score,right_score from public.\"vMatchResults\" where left_name='Ari'")
+    )[0];
+    assert.equal(savedBout.is_void, false, "Abandon must not void the bout");
+    assert.ok(savedBout.finalized_at, "Abandon must retain historical finalization");
+    assert.equal(savedBout.left_score, 4);
+    assert.equal(savedBout.right_score, 3);
+    await page.goto("http://127.0.0.1:5187/#/single-match");
+    await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
     assert.deepEqual(errors, []);
     console.log(
-      "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, desktop/mobile.",
+      "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, confirmed Abandon Match exit with preserved results, desktop/mobile.",
     );
     await page.goto("http://127.0.0.1:5187/#/fencers");
     await page.locator(".site-header").waitFor({ state: "visible" });
