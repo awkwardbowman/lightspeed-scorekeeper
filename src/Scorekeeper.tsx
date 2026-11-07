@@ -550,7 +550,7 @@ export default function Scorekeeper({ active = true }: { active?: boolean }) {
                       match.finalized_at ? setView("report") : void showManage()
                     }
                   >
-                    {match.finalized_at ? "Match Report" : "Manage"}
+                    {match.finalized_at ? "Match Report" : "Admin Mode"}
                   </button>
                   <small role="status">{busy ? "Saving…" : status}</small>
                 </div>
