@@ -146,6 +146,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const presets = useRows<Preset>("tMatchPreset");
   const eventRegistrations = useRows<{ event_id: string; fencer_id: string }>("tEventFencer", entity === "events");
   const eventTeams = useRows<{ id: string; event_id: string | null; is_archived: boolean }>("vTeamInstances", entity === "events");
+  const invitations = useRows<{ id: boolean; invitations_paused: boolean }>("tAccountPolicy", entity === "users");
+  const invitationUnavailable = entity === "users" &&
+    (invitations.loading || Boolean(invitations.error) || !invitations.data[0] || invitations.data[0].invitations_paused);
   const [params, setParams] = useState(query);
   useEffect(() => {
     const change = () => setParams(query());
@@ -179,7 +182,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
   const name = (x: Row) => String(x.display_name ?? x.name ?? "");
   const eventCount = (x: Row) =>
     x.competition_format === "team"
-      ? new Set(eventTeams.data.filter((t) => t.event_id === x.id && !t.is_archived).map((t) => t.id)).size
+      ? new Set(eventTeams.data.filter((t) => t.event_id === x.id).map((t) => t.id)).size
       : new Set(eventRegistrations.data.filter((f) => f.event_id === x.id).map((f) => f.fencer_id)).size;
   const eventCountLoading = eventRegistrations.loading || eventTeams.loading;
   const inactive = (x: Row) =>
@@ -257,11 +260,13 @@ export function RecordPage({ entity }: { entity: Entity }) {
       {mode === "lookup" ? (
         <section className="card record-lookup">
           <div className="button-row">
-            <a className="primary" href={href("create")}>
-              New {titleCase(def.name)}
-            </a>
+            {invitationUnavailable ? (
+              <button type="button" className="primary" disabled title={invitations.data[0]?.invitations_paused ? "Invitations are paused by the Admin." : "Checking invitation availability."}>New User</button>
+            ) : (
+              <a className="primary" href={href("create")}>New {titleCase(def.name)}</a>
+            )}
             {entity === "events" && <a href="#/events/teams">Manage teams</a>}
-            {entity === "users" && <InvitationPolicy />}
+            {entity === "users" && <InvitationPolicy policy={invitations} />}
           </div>
           <div className="fields">
             <label>
@@ -459,13 +464,21 @@ export function RecordPage({ entity }: { entity: Entity }) {
       ) : mode === "create" || selected ? (
         <section className="card">
           {mode === "create" || mode === "edit" ? (
+            <>
+            {entity === "users" && mode === "create" && invitationUnavailable && (
+              <p role="status" className="notice-feedback">
+                {invitations.data[0]?.invitations_paused
+                  ? "Invitations are paused. An Admin must resume invitations before new users can be invited."
+                  : invitations.error || "Checking whether invitations are available…"}
+              </p>
+            )}
             <RecordForm
               key={`${entity}:${mode}:${id}`}
               entity={entity}
               selected={mode === "edit" ? selected : undefined}
               presets={presets.data}
               busy={a.busy}
-              allowed={mode === "create" || mayEdit(selected)}
+              allowed={(mode === "create" || mayEdit(selected)) && !(entity === "users" && mode === "create" && invitationUnavailable)}
               onSave={(values) =>
                 done(async () => {
                   if (entity === "users")
@@ -486,6 +499,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 })
               }
             />
+            </>
           ) : mode === "archive" || mode === "restore" ? (
             <>
               <h3>{selected && name(selected)}</h3>
@@ -804,17 +818,14 @@ function RecordForm({
     </form>
   );
 }
-function InvitationPolicy() {
+function InvitationPolicy({ policy: p }: { policy: ReturnType<typeof useRows<{ id: boolean; invitations_paused: boolean }>> }) {
   const { profile } = useAccount();
-  const p = useRows<{ id: boolean; invitations_paused: boolean }>(
-    "tAccountPolicy",
-  );
   const a = useAction(p.reload);
   return (
     <>
       {profile.app_role === "admin" && (
         <button
-          disabled={a.busy || !p.data[0]}
+          disabled={a.busy || p.loading || !p.data[0]}
           onClick={() =>
             void a.run(() =>
               rpc("set_invitations_paused", {
@@ -829,7 +840,7 @@ function InvitationPolicy() {
       <span className="muted">
         {p.data[0]?.invitations_paused
           ? "Invitations are paused."
-          : "Managers are invited by email."}
+          : p.loading ? "Checking invitation policy…" : "Managers are invited by email."}
       </span>
       <Notice error={p.error || a.error} success={a.status} />
     </>
