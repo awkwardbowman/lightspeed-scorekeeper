@@ -176,7 +176,7 @@ export const configurationTiles: NavTile[] = [
   {
     route: "/configuration/general",
     title: "Match & Ranking Settings",
-    description: "Set penalty reasons, overtime duration, and standings tiebreakers."
+    description: "Set penalty reasons, overtime duration, and standings tiebreakers.",
     icon: "⚙",
     status: "planned",
   },
