@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { db, type Configuration as Config, write } from "./data";
-import { Intro, Notice, useAction, useRows } from "./ui";
+import { db, type Configuration as Config, type Profile, write } from "./data";
+import { describeChanges, Intro, Notice, useAction, useRows } from "./ui";
 const actions = [
   "toggle",
   "undo",
@@ -22,21 +22,30 @@ export default function Configuration({
   const [order, setOrder] = useState<string[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const baseline = useRef<Config | null>(null);
+  const touched = useRef({
+    reasons: false,
+    overtime: false,
+    order: false,
+    keys: false,
+  });
   useEffect(() => {
     if (r.data[0]) {
       const old = baseline.current;
       setOrder((value) =>
-        !old || JSON.stringify(value) === JSON.stringify(old.tiebreakers)
+        (!old && !touched.current.order) ||
+        (old && JSON.stringify(value) === JSON.stringify(old.tiebreakers))
           ? r.data[0].tiebreakers
           : value,
       );
       setReasons((value) =>
-        !old || value === old.penalty_reasons.join("\n")
+        (!old && !touched.current.reasons) ||
+        (old && value === old.penalty_reasons.join("\n"))
           ? r.data[0].penalty_reasons.join("\n")
           : value,
       );
       setOvertime((value) =>
-        !old || value === old.overtime_ms / 1000
+        (!old && !touched.current.overtime) ||
+        (old && value === old.overtime_ms / 1000)
           ? r.data[0].overtime_ms / 1000
           : value,
       );
@@ -47,7 +56,8 @@ export default function Configuration({
           ),
         );
       setKeys((value) =>
-        !old || JSON.stringify(value) === JSON.stringify(supported(old))
+        (!old && !touched.current.keys) ||
+        (old && JSON.stringify(value) === JSON.stringify(supported(old)))
           ? supported(r.data[0])
           : value,
       );
@@ -64,7 +74,7 @@ export default function Configuration({
       <Intro
         title={
           kind === "general"
-            ? "Ranking Configuration"
+            ? "Match & Ranking Settings"
             : kind === "key-mappings"
               ? "Keyboard Mappings"
               : "Team Images"
@@ -77,12 +87,17 @@ export default function Configuration({
         <fieldset disabled={r.loading || a.busy || Boolean(r.error)}>
           {kind === "general" && (
             <>
-              <h3>Card penalty reasons</h3>
+              <h3>Match rules</h3>
+              <p>Card reasons appear in the referee’s penalty picker. The overtime limit applies to knockout matches.</p>
+              <h4>Card penalty reasons</h4>
               <label>
                 Selectable reason tiles (one per line)
                 <textarea
                   value={reasons}
-                  onChange={(e) => setReasons(e.target.value)}
+                  onChange={(e) => {
+                    touched.current.reasons = true;
+                    setReasons(e.target.value);
+                  }}
                 />
               </label>
               <label>
@@ -92,7 +107,10 @@ export default function Configuration({
                   min={1}
                   max={60}
                   value={overtime}
-                  onChange={(e) => setOvertime(Number(e.target.value))}
+                  onChange={(e) => {
+                    touched.current.overtime = true;
+                    setOvertime(Number(e.target.value));
+                  }}
                 />
               </label>
               <button
@@ -142,7 +160,10 @@ export default function Configuration({
                       : "Total points scored"}{" "}
                     <button
                       className="icon-btn"
-                      onClick={() => setOrder(order.filter((x) => x !== k))}
+                      onClick={() => {
+                        touched.current.order = true;
+                        setOrder(order.filter((x) => x !== k));
+                      }}
                     >
                       Remove
                     </button>
@@ -150,6 +171,7 @@ export default function Configuration({
                       <button
                         className="icon-btn"
                         onClick={() => {
+                          touched.current.order = true;
                           const next = [...order];
                           [next[i - 1], next[i]] = [next[i], next[i - 1]];
                           setOrder(next);
@@ -168,7 +190,10 @@ export default function Configuration({
                     <button
                       key={k}
                       className="subtle"
-                      onClick={() => setOrder([...order, k])}
+                      onClick={() => {
+                        touched.current.order = true;
+                        setOrder([...order, k]);
+                      }}
                     >
                       Add{" "}
                       {k === "differential"
@@ -214,6 +239,7 @@ export default function Configuration({
                       aria-label={`Shortcut ${action}`}
                       value={keys[action] ?? ""}
                       onChange={(e) => {
+                        touched.current.keys = true;
                         const next = { ...keys };
                         if (e.target.value)
                           next[action] = e.target.value.toLowerCase();
@@ -273,6 +299,7 @@ function ConfigurationAudit() {
     old_value: unknown;
     new_value: unknown;
   }>("tAudit");
+  const users = useRows<Profile>("tUser");
   return (
     <section className="card">
       <h3>Configuration audit</h3>
@@ -285,15 +312,9 @@ function ConfigurationAudit() {
         .map((a) => (
           <details key={a.id}>
             <summary>
-              {a.recorded_at} · {a.actor_id ?? "System"} · {a.table_name}
+              {new Date(a.recorded_at).toLocaleString()} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"} · {a.table_name === "tConfiguration" ? "General settings" : "Team settings"}
             </summary>
-            <pre>
-              {JSON.stringify(
-                { before: a.old_value, after: a.new_value },
-                null,
-                2,
-              )}
-            </pre>
+            <p>{describeChanges(a.old_value, a.new_value)}</p>
           </details>
         ))}
     </section>

@@ -9,11 +9,14 @@ import {
   type Fencer,
   type MatchRow,
   type Standing,
+  type Profile,
 } from "./data";
 import { EventPicker, StandingsTable } from "./Events";
 import {
   ArchiveFilter,
-  downloadJson,
+  competitorLabel,
+  BackLink,
+  describeChanges,
   Intro,
   Notice,
   Search,
@@ -22,6 +25,7 @@ import {
 export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const operations = useRows<Operation>("tMatchOperation");
   const events = useRows<EventRecord>("tEvent");
+  const users = useRows<Profile>("tUser");
   const fencers = useRows<Fencer>("tFencer");
   const matches = useRows<MatchRow>("vMatchResults");
   const calls = useRows<{
@@ -118,7 +122,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           : true) &&
       (scope === "all" ||
         (scope === "event" ? Boolean(m.event_id) : !m.event_id)) &&
-      `${m.current_left_name} ${m.current_right_name} ${m.id}`
+      `${m.current_left_name} ${m.current_right_name}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   ).sort((a, b) => matchOrder === "oldest"
@@ -131,6 +135,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const selectedPhases = phases.data.filter((p) => p.event_id === id);
   return (
     <>
+      <BackLink href="#/history" />
       <Intro
         title={`${kind === "events" ? "Event" : kind === "fencers" ? "Fencer" : "Match"} History`}
       >
@@ -180,7 +185,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 setMatchId("");
               }}
             >
-              <option value="">Select registered fencer</option>
+              <option value="">Select a fencer</option>
               {fencers.data
                 .filter(
                   (f) =>
@@ -193,7 +198,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.display_name} · {f.id.slice(0, 8)}
+                    {competitorLabel(f, fencers.data)}
                   </option>
                 ))}
             </select>
@@ -222,10 +227,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   .map((b) => (
                     <details key={b.id}>
                       <summary>
-                        {b.format} · {b.id.slice(0, 8)}
+                        {b.format} · {p.name}
                         {b.is_archived ? " · Archived" : ""}
                       </summary>
-                      <pre>{JSON.stringify(b.graph, null, 2)}</pre>
+                      <p>Bracket generation retained. Matches and results are shown below.</p>
                     </details>
                   ))}
               </section>
@@ -254,7 +259,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     <ul>
                       {t.members.map((m) => (
                         <li key={m.id}>
-                          {m.fencer_name} · {m.fencer_id}
+                          {m.fencer_name}
                         </li>
                       ))}
                     </ul>
@@ -310,10 +315,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                       s.display_name,
                   }))}
                 />
-                <details>
-                  <summary>Ranking configuration at finalization</summary>
-                  <pre>{JSON.stringify(snap.configuration, null, 2)}</pre>
-                </details>
+                <p className="muted">The original ranking configuration is retained with this finalized standings snapshot.</p>
               </>
             )}
           </>
@@ -456,13 +458,27 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     ? " · Archived"
                     : m.is_void
                       ? " · Void"
-                      : ""} · {m.id.slice(0, 8)}
+                      : ""}
                 </small>
               </button>
             );
           })}
-          {kind === "matches" && !matches.loading && list.length === 0 && (
-            <p role="status">No matches match your filters.</p>
+          {!matches.loading && list.length === 0 && (
+            <p role="status">
+              {kind === "events" && !id
+                ? "Select an event to see its matches and results."
+                : kind === "fencers" && !id
+                  ? "Select a fencer to see their previous matches."
+                  : search.trim()
+                    ? "No matches match this search. Try another competitor name."
+                    : scope !== "all"
+                      ? "No matches in this scope. Try another match scope."
+                      : kind === "events"
+                        ? "No matches recorded for this event."
+                        : kind === "fencers"
+                          ? "No matches recorded for this fencer."
+                          : "No matches recorded yet."}
+            </p>
           )}
         </div>
       </section>
@@ -472,8 +488,8 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             {match.current_left_name} vs {match.current_right_name}
           </h3>
           <p>
-            {match.left_score}–{match.right_score} · {match.outcome} · Referee{" "}
-            {match.referee_id ?? "Not recorded"}
+            {match.left_score}–{match.right_score} · {match.outcome === "draw" ? "Draw" : match.finalized_at ? "Final result" : "Incomplete"} · Referee{" "}
+            {users.data.find((u) => u.id === match.referee_id)?.display_name ?? (match.referee_id ? "Recorded referee" : "Not recorded")}
           </p>
           <div className="button-row">
             <button
@@ -484,44 +500,27 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 window.location.hash = "/single-match";
               }}
             >
-              Open / correct match
-            </button>
-            <button
-              className="subtle"
-              onClick={() =>
-                downloadJson(`match-${match.id}.json`, {
-                  match,
-                  calls: calls.data.filter((c) => c.match_id === match.id),
-                  operations: operations.data.filter(
-                    (o) => o.match_id === match.id,
-                  ),
-                  audit: audit.data.filter(
-                    (a) =>
-                      a.record_id === match.id ||
-                      calls.data.some(
-                        (c) => c.id === a.record_id && c.match_id === match.id,
-                      ),
-                  ),
-                })
-              }
-            >
-              Export full report
+              Open Match
             </button>
           </div>
+          {(match.is_archived || match.is_void) && (
+            <p className="muted">Archived or void matches are read-only. Their saved history remains available below.</p>
+          )}
           <h4>Audited match operations</h4>
           <Notice error={operations.error} />
           <MatchLog
+            names={{ left: match.current_left_name, right: match.current_right_name }}
             operations={operations.data
               .filter((o) => o.match_id === match.id)
               .sort((a, b) => a.sequence - b.sequence)}
           />
-          <h4>Original calls (including reversals)</h4>
+          <h4>Original scoring calls</h4>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>UTC</th>
-                  <th>Side / call</th>
+                  <th>Local time</th>
+                  <th>Competitor / action</th>
                   <th>Points</th>
                   <th>Clock</th>
                   <th>Status</th>
@@ -533,9 +532,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
                   .map((c) => (
                     <tr key={c.id}>
-                      <td>{c.recorded_at}</td>
+                      <td><time dateTime={c.recorded_at}>{new Date(c.recorded_at).toLocaleString()}</time></td>
                       <td>
-                        {c.side} · {c.call_type}
+                        {c.side === "left" ? match.current_left_name : match.current_right_name} · {c.call_type === "indirect" ? "Indirect hit" : c.call_type === "clean" ? "Clean hit" : c.call_type === "counter" ? "Counter" : c.call_type}
                       </td>
                       <td>{c.points}</td>
                       <td>{(c.match_time_ms / 1000).toFixed(1)}s</td>
@@ -545,8 +544,12 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               </tbody>
             </table>
           </div>
-          <h4>Applied settings & provenance</h4>
-          <pre>{JSON.stringify(match, null, 2)}</pre>
+          <h4>Match details</h4>
+          <p>
+            {match.event_id ? events.data.find((e) => e.id === match.event_id)?.name ?? "Historical event" : "Standalone match"}
+            {" · "}{match.slot_key ? `Bracket slot ${match.slot_key}` : "Manual pairing"}
+            {" · "}{match.finalized_at ? `Finalized ${new Date(match.finalized_at).toLocaleString()}` : "Not finalized"}
+          </p>
           <h4>Correction audit</h4>
           {audit.data
             .filter(
@@ -560,15 +563,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             .map((a) => (
               <details key={a.id}>
                 <summary>
-                  {a.recorded_at} · {a.action} · {a.actor_id ?? "System"}
+                  {new Date(a.recorded_at).toLocaleString()} · {a.action} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"}
                 </summary>
-                <pre>
-                  {JSON.stringify(
-                    { before: a.old_value, after: a.new_value },
-                    null,
-                    2,
-                  )}
-                </pre>
+                <p>{describeChanges(a.old_value, a.new_value)}</p>
               </details>
             ))}
         </section>

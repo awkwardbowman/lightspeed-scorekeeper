@@ -330,7 +330,7 @@ function AssetGallery({
     .filter(
       (x) =>
         (filter === "all" || x.is_archived === (filter === "archived")) &&
-        `${x.display_name} ${x.id}`
+        `${x.display_name}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
@@ -359,13 +359,24 @@ function AssetGallery({
           <select
             aria-label="Image status"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setLimit(24);
+            }}
           >
             <option value="active">Active</option>
             <option value="archived">Archived</option>
             <option value="all">All</option>
           </select>
         </label>
+      </div>
+      <div className="record-result-summary">
+        <span role="status">{loading ? "Loading images…" : `Showing ${Math.min(filtered.length, limit)} of ${filtered.length} matching images`}</span>
+        {(search || filter !== "active") && (
+          <button type="button" className="subtle" onClick={() => { setSearch(""); setFilter("active"); setLimit(24); }}>
+            Clear filters
+          </button>
+        )}
       </div>
       <div className="image-gallery">
         {filtered.slice(0, limit).map((x) => (
@@ -383,7 +394,7 @@ function AssetGallery({
               {uploaders.data.find((u) => u.id === x.owner_id)?.display_name ||
                 "Retained Account"}
             </small>
-            <CopyId id={x.id} />
+
             <div className="button-row">
               {onSelect && !x.is_archived && (
                 <button type="button" onClick={() => onSelect(x)}>
@@ -408,7 +419,7 @@ function AssetGallery({
       )}
       {filtered.length > limit && (
         <button type="button" onClick={() => setLimit((n) => n + 24)}>
-          Show more images
+          Show more images (${Math.min(24, filtered.length - limit)} more)
         </button>
       )}
     </>
@@ -468,6 +479,11 @@ export default function ImageLibrary() {
           </button>{" "}
           <a href="#/configuration/team-images">Cancel</a>
         </section>
+      ) : mode === "archive" && !selected && !assets.loading ? (
+        <section className="card">
+          <p role="alert">This image could not be found. It may have been removed or the link may be outdated.</p>
+          <a href="#/configuration/team-images">Return to Image Library</a>
+        </section>
       ) : (
         <>
           <a className="primary" href="#/configuration/team-images?mode=upload">
@@ -492,25 +508,32 @@ export default function ImageLibrary() {
   );
 }
 
+/** Only show record identifiers in an explicit ID column or dedicated ID lookup. */
 export function CopyId({ id }: { id: string }) {
   const [status, setStatus] = useState("");
   return (
     <span className="copy-id">
-      <code>{id.slice(0, 8)}</code>
+      <code title={id}>{id.slice(0, 8)}</code>
       <button
         type="button"
+        className="copy-id-button"
+        aria-label="Copy ID"
+        title="Copy ID"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(id);
-            setStatus("ID Copied");
+            setStatus("ID copied");
           } catch {
-            setStatus(`Copy this ID: ${id}`);
+            setStatus("Unable to copy ID. Check browser clipboard permission.");
           }
         }}
       >
-        Copy ID
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="8" y="8" width="12" height="12" rx="2" />
+          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+        </svg>
       </button>
-      <small role="status">{status}</small>
+      {status && <small role="status">{status}</small>}
     </span>
   );
 }

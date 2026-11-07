@@ -793,7 +793,48 @@ try {
       await page.getByRole("button", { name: "left indirect +1" }).isDisabled(),
       true,
     );
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    await page.getByRole("heading", { name: "Match Log", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Previous Cards", exact: true }).waitFor();
+    assert.equal(await page.locator("details.match-rail").count(), 0, "Admin side panels cannot collapse");
+    assert.equal(await page.locator(".log-rail pre").count(), 0, "Live log cannot show JSON payloads");
+    assert.equal(await page.getByRole("button", { name: /Nullify log entry:/ }).count(), 1, "Saved scoring calls must offer Nullify");
+    // The UI must actually reverse a persisted call, not merely render a button.
+    page.once("dialog", (dialog) => {
+      assert.match(dialog.message(), /Ari/);
+      assert.match(dialog.message(), /Score effect being reversed/);
+      dialog.accept();
+    });
+    await page.getByRole("button", { name: /Nullify log entry:/ }).click();
+    await page.waitForFunction(() =>
+      document.querySelector(".admin-center .live-side.left .live-score")?.textContent?.trim() === "0",
+    );
+    assert.equal(
+      (await q(`select left_score from public."vMatchResults" where left_name='Ari'`))[0].left_score,
+      0,
+      "Nullify restores the persisted score",
+    );
+    assert.equal(
+      (await q(`select count(*)::int n from public."tMatchOperation" where kind='reverse'`))[0].n,
+      1,
+      "Nullify writes one immutable reversal",
+    );
+    await page.reload();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+    await page.getByText("Nullified", { exact: true }).first().waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: /Nullify log entry:.*clean/i }).count(),
+      0,
+      "A previously nullified call cannot be nullified twice",
+    );
+    // Reapply the same numeric total as an audited score correction so the
+    // remaining staged-editor, penalty and report assertions stay independent.
+    for (let i = 0; i < 3; i++)
+      await page.getByRole("button", { name: "Increase Left score", exact: true }).click();
+    await page.getByRole("button", { name: "Apply left score", exact: true }).click();
+    await page.waitForFunction(() =>
+      document.querySelector(".admin-center .live-side.left .live-score")?.textContent?.trim() === "3",
+    );
     await page
       .getByRole("button", { name: "Increase Left score", exact: true })
       .click();
@@ -896,7 +937,7 @@ try {
       ),
       "mobile has no horizontal overflow",
     );
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
     await page.getByRole("button", { name: "Penalty on Ari" }).click();
     await page.getByRole("button", { name: "Power", exact: true }).click();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -1155,7 +1196,7 @@ try {
     .getByRole("button", { name: "Assign Browser cloned team", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "Available unassigned teams", exact: true })
+    .getByRole("heading", { name: /^Available unregistered teams \(\d+\)$/ })
     .waitFor();
   await page.getByText("Saved.", { exact: true }).waitFor();
   assert.equal(

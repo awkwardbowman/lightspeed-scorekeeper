@@ -4,11 +4,12 @@ import {
   type EventRecord,
   type Fencer,
   type ImageAsset,
+  type Profile,
   type TeamInstance,
   type TeamMember,
 } from "./data";
 import { ImagePicker, ImagePreview, useHashParams } from "./Images";
-import { Intro, Notice, useAction, useRows } from "./ui";
+import { BackLink, describeChanges, Intro, Notice, useAction, useRows } from "./ui";
 const base = "/events/teams";
 function teamHref(mode: string, id?: string, event?: string) {
   return `#${base}?mode=${mode}${id ? `&id=${encodeURIComponent(id)}` : ""}${event ? `&return_event=${encodeURIComponent(event)}` : ""}`;
@@ -105,7 +106,7 @@ export default function Teams() {
           (filter === "unassigned"
             ? !t.event_id && !t.is_archived
             : t.is_archived === (filter === "archived"))) &&
-        `${t.name} ${t.id} ${eventName(t)}`
+        `${t.name} ${eventName(t)}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
@@ -119,6 +120,7 @@ export default function Teams() {
     );
   return (
     <div className="team-pages">
+      {((mode === "roster" || mode === "history") || (returnEvent && mode === "lookup")) && <BackLink href={back} />}
       <Intro
         title={
           mode === "create"
@@ -165,7 +167,6 @@ export default function Teams() {
                 Clone previous team
               </a>
             )}
-            {returnEvent && <a href={back}>Back to event</a>}
           </div>
           <div className="form-grid">
             <label>
@@ -180,7 +181,7 @@ export default function Teams() {
               />
             </label>
             <label>
-              Team status
+              Status / assignment
               <select
                 value={filter}
                 onChange={(e) => {
@@ -190,7 +191,7 @@ export default function Teams() {
               >
                 {["active", "archived", "all", "unassigned"].map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === "unassigned" ? "Unassigned to event" : s === "all" ? "All teams" : s === "active" ? "Active teams" : "Archived teams"}
                   </option>
                 ))}
               </select>
@@ -210,6 +211,7 @@ export default function Teams() {
               The clone gets fresh membership records for active fencers only.
             </p>
           )}
+          <p role="status">{teams.loading ? "Loading teams…" : `Showing ${list.length} of ${teams.data.length} teams`}</p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -225,7 +227,6 @@ export default function Teams() {
                   <tr key={t.id}>
                     <td>
                       <TeamBadge team={t} assets={assets.data} />
-                      <small title={t.id}>{t.id.slice(0, 8)}</small>
                     </td>
                     <td>
                       {events.data.find((e) => e.id === t.event_id)?.name ??
@@ -243,16 +244,17 @@ export default function Teams() {
                           </a>
                         ) : (
                           <>
-                            <a href={teamHref("edit", t.id)}>Edit</a>
-                            <a href={teamHref("roster", t.id)}>Roster</a>
+                            <a href={teamHref("edit", t.id, returnEvent)}>Edit</a>
+                            <a href={teamHref("roster", t.id, returnEvent)}>Roster</a>
                             <details className="team-more">
-                              <summary>More</summary>
-                              <a href={teamHref("clone", t.id)}>Clone</a>
-                              <a href={teamHref("history", t.id)}>History</a>
+                              <summary aria-label={`More actions for ${t.name}`}>More actions</summary>
+                              <a href={teamHref("clone", t.id, returnEvent)}>Clone</a>
+                              <a href={teamHref("history", t.id, returnEvent)}>History</a>
                               <a
                                 href={teamHref(
                                   t.is_archived ? "restore" : "archive",
                                   t.id,
+                                  returnEvent,
                                 )}
                               >
                                 {t.is_archived ? "Restore" : "Archive"}
@@ -270,8 +272,8 @@ export default function Teams() {
           {!teams.loading && !teams.error && !list.length && (
             <p role="status">
               {teams.data.length === 0
-                ? "No teams yet."
-                : "No teams match your filters."}
+                ? "No teams yet. Create a team to get started."
+                : "No teams match the current search or status filter."}
             </p>
           )}
         </section>
@@ -290,9 +292,6 @@ export default function Teams() {
         />
       ) : selected ? (
         <section className="card">
-          {(mode === "roster" || mode === "history") && (
-            <a href={back}>← Back to lookup</a>
-          )}
           <h3>{selected.name}</h3>
           {mode === "roster" ? (
             <Roster team={selected} onChange={teams.reload} />
@@ -619,6 +618,7 @@ function Roster({
 }) {
   const members = useRows<TeamMember>("tTeamMember"),
     fencers = useRows<Fencer>("tFencer"),
+    users = useRows<Profile>("tUser"),
     command = useTeamCommand(),
     [asOf, setAsOf] = useState(""),
     [search, setSearch] = useState("");
@@ -658,8 +658,7 @@ function Roster({
       <ul>
         {visible.map((m) => (
           <li key={m.id}>
-            {fencers.data.find((f) => f.id === m.fencer_id)?.display_name ??
-              m.fencer_id}{" "}
+            {fencers.data.find((f) => f.id === m.fencer_id)?.display_name ?? "Unavailable fencer"}{" "}
             {fencers.data.find((f) => f.id === m.fencer_id)?.is_archived
               ? "(archived)"
               : ""}
@@ -725,17 +724,16 @@ function Roster({
           .filter((m) => m.team_id === team.id)
           .map((m) => (
             <li key={m.id}>
-              {fencers.data.find((f) => f.id === m.fencer_id)?.display_name ??
-                m.fencer_id}
-              : added {m.added_at} by {m.added_by ?? "legacy import"}
+              {fencers.data.find((f) => f.id === m.fencer_id)?.display_name ?? "Unavailable fencer"}
+              : added {new Date(m.added_at).toLocaleString(undefined, { timeZone: "UTC", timeZoneName: "short" })} by {users.data.find((u) => u.id === m.added_by)?.display_name ?? (m.added_by ? "Former staff member" : "Legacy import")}
               {m.removed_at
-                ? `; removed ${m.removed_at} by ${m.removed_by}`
+                ? `; removed ${new Date(m.removed_at).toLocaleString(undefined, { timeZone: "UTC", timeZoneName: "short" })} by ${users.data.find((u) => u.id === m.removed_by)?.display_name ?? "Former staff member"}`
                 : ""}
             </li>
           ))}
       </ul>
       <Notice
-        error={members.error || fencers.error || a.error}
+        error={members.error || fencers.error || users.error || a.error}
         success={a.status}
         loading={members.loading || fencers.loading}
       />
@@ -763,13 +761,14 @@ function TeamHistory({
     old_value: unknown;
     new_value: unknown;
   }>("tAudit");
+  const users = useRows<Profile>("tUser");
   const instances = teams.filter(
     (t) => t.team_identity_id === team.team_identity_id,
   );
   return (
     <>
       <p>
-        Shared team identity: {team.team_identity_id}. Team scoring and
+        These team instances share a team identity. Team scoring and
         statistics remain unavailable until team match rules are implemented.
       </p>
       {instances.map((t) => (
@@ -777,17 +776,17 @@ function TeamHistory({
           <TeamBadge team={t} assets={assets} />
           <p>
             {events.find((e) => e.id === t.event_id)?.name ?? "Unassigned"} ·{" "}
-            {t.is_archived ? "Archived" : "Active"} · {t.id}
+            {t.is_archived ? "Archived" : "Active"}
           </p>
           <p>
             {t.cloned_from_team_id
-              ? `Cloned from ${teams.find((x) => x.id === t.cloned_from_team_id)?.name ?? t.cloned_from_team_id}`
+              ? `Cloned from ${teams.find((x) => x.id === t.cloned_from_team_id)?.name ?? "an earlier team instance"}`
               : "Original instance"}
           </p>
           <a href={teamHref("roster", t.id)}>Current and historical roster</a>
         </article>
       ))}
-      <h4>Instance changes (UTC)</h4>
+      <h4>Instance changes</h4>
       {audits.data
         .filter(
           (a) =>
@@ -798,15 +797,13 @@ function TeamHistory({
         .map((a) => (
           <details key={a.id}>
             <summary>
-              {a.action} · {a.recorded_at} · {a.actor_id ?? "migration"}
+              {a.action} · {new Date(a.recorded_at).toLocaleString()} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? (a.actor_id ? "Former staff member" : "System")}
             </summary>
-            <pre>
-              {JSON.stringify(
-                { before: a.old_value, after: a.new_value },
-                null,
-                2,
-              )}
-            </pre>
+            <p>{describeChanges(a.old_value, a.new_value, (key, value) =>
+              key === "event_id" ? events.find((e) => e.id === value)?.name ?? (value ? "Earlier event" : "Unassigned") :
+              key === "logo_image_asset_id" ? assets.find((x) => x.id === value)?.display_name ?? (value ? "Earlier image" : "None") :
+              undefined
+            )}</p>
           </details>
         ))}
       <Notice error={audits.error} />
@@ -818,7 +815,13 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
     assets = useRows<ImageAsset>("tImageAsset"),
     command = useTeamCommand(),
     a = useAction(teams.reload),
-    [search, setSearch] = useState("");
+    [search, setSearch] = useState(""),
+    [registrationFilter, setRegistrationFilter] = useState("all");
+  const normalizedSearch = search.trim().toLowerCase();
+  const registered = teams.data.filter((t) => t.event_id === event.id && t.name.toLowerCase().includes(normalizedSearch));
+  const available = teams.data.filter((t) =>
+    !t.event_id && !t.is_archived && t.mode === event.mode &&
+    t.name.toLowerCase().includes(normalizedSearch));
   const eligible =
     event.competition_format === "team" &&
     ["draft", "active"].includes(event.status);
@@ -833,23 +836,36 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
         <a href={teamHref("create", undefined, event.id)}>Create team</a>
         <a href={teamHref("clone", undefined, event.id)}>Clone previous team</a>
       </div>
-      <h4>Assigned teams</h4>
-      {teams.data
-        .filter((t) => t.event_id === event.id)
-        .map((t) => (
+      <label>
+        Registration status
+        <select value={registrationFilter} onChange={(e) => setRegistrationFilter(e.target.value)}>
+          <option value="all">All</option>
+          <option value="registered">Registered</option>
+          <option value="unregistered">Unregistered</option>
+        </select>
+      </label>
+      <label>
+        Search teams
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search registered and available teams" />
+      </label>
+      <p role="status">Showing {registrationFilter === "registered" ? registered.length : registrationFilter === "unregistered" ? available.length : registered.length + (eligible ? available.length : 0)} matching teams</p>
+      {registrationFilter !== "unregistered" && <h4>Registered teams ({registered.length})</h4>}
+      {registrationFilter !== "unregistered" && registered.map((t) => (
           <article className="card" key={t.id}>
             <TeamBadge team={t} assets={assets.data} />
+            {t.is_archived && <p className="muted">Archived · still assigned to this event</p>}
             <div className="button-row">
-              <a href={teamHref("roster", t.id)}>Edit roster</a>
-              <a href={teamHref("edit", t.id)}>Edit team</a>
+              <a href={teamHref("roster", t.id, event.id)}>Edit roster</a>
+              <a href={teamHref("edit", t.id, event.id)}>Edit team</a>
               <a href={teamHref("clone", t.id, event.id)}>Clone</a>
               <button
                 disabled={a.busy || t.assignment_locked}
-                onClick={() =>
+                onClick={() => {
+                  if (!window.confirm(`Unassign ${t.name} from ${event.name}? Confirm there are no scheduled matches or historical results depending on this assignment. Locked teams cannot be unassigned.`)) return;
                   void a.run(() =>
                     command("edit", t.id, t.revision, { event_id: null }),
-                  )
-                }
+                  );
+                }}
               >
                 Unassign
               </button>
@@ -859,26 +875,10 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
             </div>
           </article>
         ))}
-      {eligible && (
+      {eligible && registrationFilter !== "registered" && (
         <>
-          <h4>Available unassigned teams</h4>
-          <label>
-            Search unassigned teams
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          {teams.data
-            .filter(
-              (t) =>
-                !t.event_id &&
-                !t.is_archived &&
-                t.mode === event.mode &&
-                t.name.toLowerCase().includes(search.toLowerCase()),
-            )
-            .map((t) => (
+          <h4>Available unregistered teams ({available.length})</h4>
+          {available.map((t) => (
               <article className="card" key={t.id}>
                 <TeamBadge team={t} assets={assets.data} />
                 <button
@@ -895,6 +895,9 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
             ))}
         </>
       )}
+      {!teams.loading && (registrationFilter === "registered" ? !registered.length :
+        registrationFilter === "unregistered" ? !available.length : !registered.length && (!eligible || !available.length)) &&
+        <p role="status">No teams match this search and registration filter. Teams assigned to another event must be cloned before they can be assigned here.</p>}
       <Notice
         error={teams.error || assets.error || a.error}
         success={a.status}

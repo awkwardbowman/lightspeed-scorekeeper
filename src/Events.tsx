@@ -11,7 +11,7 @@ import {
   type MatchRow,
 } from "./data";
 import { bracketGraph } from "./tournament";
-import { ArchiveFilter, Intro, Notice, Search, useAction, useRows } from "./ui";
+import { ArchiveFilter, BackLink, competitorLabel, Intro, Notice, Search, useAction, useRows } from "./ui";
 export function useEventSelection() {
   const r = useRows<EventRecord>("tEvent");
   const [id, setIdValue] = useState(
@@ -88,37 +88,47 @@ export function StandingsTable({ data }: { data: Standing[] }) {
 }
 export function Registration({ eventId }: { eventId: string }) {
   const f = useRows<Fencer>("tFencer");
+  const allFencers = f.data;
   const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
   const a = useAction(r.reload);
   const [search, setSearch] = useState("");
+  const [registrationFilter, setRegistrationFilter] = useState("all");
+  const registeredIds = new Set(r.data.filter((x) => x.event_id === eventId).map((x) => x.fencer_id));
+  const visible = f.data.filter((competitor) =>
+    !competitor.is_unregistered &&
+    (!competitor.is_archived || registeredIds.has(competitor.id)) &&
+    `${competitor.display_name} ${competitor.affiliation}`.toLowerCase().includes(search.trim().toLowerCase()) &&
+    (registrationFilter === "all" ||
+      registeredIds.has(competitor.id) === (registrationFilter === "registered")),
+  ).sort((a, b) =>
+    a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+    a.id.localeCompare(b.id),
+  );
   return (
     <section>
-      <h3>Registered competitors</h3>
+      <h3>Event registrations</h3>
       <Search value={search} onChange={setSearch} />
+      <label>
+        Registration status
+        <select value={registrationFilter} onChange={(e) => setRegistrationFilter(e.target.value)}>
+          <option value="all">All</option>
+          <option value="registered">Registered</option>
+          <option value="unregistered">Unregistered</option>
+        </select>
+      </label>
+      <p role="status">{r.loading || f.loading ? "Loading competitors…" : `Showing ${visible.length} fencers (${registeredIds.size} registered in this event)`}</p>
       <Notice error={r.error || f.error} />
       <div className="selection-list">
-        {f.data
-          .filter(
-            (f) =>
-              !f.is_unregistered &&
-              !f.is_archived &&
-              f.display_name.toLowerCase().includes(search.toLowerCase()),
-          )
-          .sort((a, b) =>
-            a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
-            a.id.localeCompare(b.id),
-          )
-          .map((f) => {
-            const exists = r.data.some(
-              (x) => x.event_id === eventId && x.fencer_id === f.id,
-            );
+        {visible.map((f) => {
+            const exists = registeredIds.has(f.id);
             return (
               <label className="check" key={f.id}>
                 <input
                   type="checkbox"
                   checked={exists}
-                  disabled={a.busy}
-                  onChange={() =>
+                  disabled={a.busy || r.loading || f.is_archived}
+                  onChange={() => {
+                    if (exists && !window.confirm(`Unregister ${f.display_name} from this event? Removing someone who has already competed may affect live standings. Do not remove played entrants until the post-match registration safeguards are implemented.`)) return;
                     void a.run(async () => {
                       const q = exists
                         ? db()
@@ -131,14 +141,15 @@ export function Registration({ eventId }: { eventId: string }) {
                             .insert({ event_id: eventId, fencer_id: f.id });
                       const { error } = await q;
                       if (error) throw error;
-                    })
-                  }
+                    });
+                  }}
                 />
-                {f.display_name} <small>{f.id.slice(0, 8)}</small>
+                {competitorLabel(f, allFencers)} {f.is_archived && <small>(Archived · historical registration, read-only)</small>}
               </label>
             );
           })}
       </div>
+      {!r.loading && !f.loading && visible.length === 0 && <p role="status">No fencers match this registration filter.</p>}
       <Notice error={a.error} success={a.status} />
     </section>
   );
@@ -169,6 +180,27 @@ interface Bracket {
   graph: unknown;
   created_at: string;
 }
+/** Lifecycle controls are operational actions belonging to Run Event. */
+export function EventStatus({ event, onDone }: { event: EventRecord; onDone: () => Promise<void> }) {
+  const a = useAction(onDone);
+  return (
+    <section aria-label="Event lifecycle">
+      <h3>Event Status: {event.status}</h3>
+      <div className="button-row">
+        {["draft", "active", "completed"].filter((s) => s !== event.status).map((s) => (
+          <button type="button" key={s} disabled={a.busy}
+            onClick={() => {
+              if (window.confirm(`Change ${event.name} to ${s}? Completing freezes standings; reopening preserves prior versions.`))
+                void a.run(() => rpc("set_event_status", { p_event: event.id, p_status: s }));
+            }}>
+            {s === "active" && event.status === "completed" ? "Reopen" : s === "active" ? "Activate" : s === "completed" ? "Complete" : "Return to Draft"}
+          </button>
+        ))}
+      </div>
+      <Notice error={a.error} success={a.status} />
+    </section>
+  );
+}
 export function RunEvent() {
   const { profile } = useAccount();
   const e = useEventSelection();
@@ -179,6 +211,7 @@ export function RunEvent() {
     "tEventFencer",
   );
   const f = useRows<Fencer>("tFencer");
+  const allFencers = f.data;
   const matches = useRows<MatchRow>("vMatchResults");
   const brackets = useRows<Bracket>("tBracket");
   const presets = useRows<Preset>("tMatchPreset");
@@ -230,9 +263,13 @@ export function RunEvent() {
   }
   return (
     <>
+      {new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("from") === "events" ? (
+        <BackLink href="#/events" />
+      ) : window.location.hash.split("?")[0].replace(/^#/, "") !== "/run-event" ? (
+        <BackLink href="#/run-event" />
+      ) : null}
       <Intro title="Run Event">
-        Assign groups manually, generate group fixtures, then select bracket
-        entrants in placement order.
+        Select the event to manage its lifecycle and run scheduled matches.
       </Intro>
       <EventPicker
         events={e.data}
@@ -258,6 +295,11 @@ export function RunEvent() {
           presets.error
         }
       />
+      {e.event && (
+        <section className="card">
+          <EventStatus event={e.event} onDone={e.reload} />
+        </section>
+      )}
       {e.event &&
       (e.event.mode !== "traditional" ||
         e.event.competition_format !== "individual") ? (
@@ -276,11 +318,16 @@ export function RunEvent() {
               </p>
               {e.event.status !== "active" && (
                 <p>
-                  Activate or reopen the event under Manage Events before
+                  Use the lifecycle controls above to activate or reopen the event before
                   running matches.
                 </p>
               )}
-              <Registration eventId={e.id} />
+              <p>
+                {registered.length} registered fencers.{" "}
+                <a href={`#/events?mode=relationships&id=${encodeURIComponent(e.id)}&return=run-event`}>
+                  Manage Event Registrations
+                </a>
+              </p>
               <h3>Competition phases</h3>
               <form
                 className="editor inline-editor"
@@ -429,7 +476,7 @@ export function RunEvent() {
                                 })
                               }
                             />
-                            {f.display_name}
+                            {competitorLabel(f, allFencers)}
                           </label>
                         );
                       })}
@@ -479,14 +526,14 @@ export function RunEvent() {
                               key={f.id}
                               onClick={() => setSeeds([...seeds, f.id])}
                             >
-                              Add {f.display_name}
+                              Add {competitorLabel(f, allFencers)}
                             </button>
                           ))}
                       </div>
                       <ol>
                         {seeds.map((id, i) => (
                           <li key={id}>
-                            {f.data.find((f) => f.id === id)?.display_name}{" "}
+                            {f.data.find((f) => f.id === id) ? competitorLabel(f.data.find((f) => f.id === id)!, f.data) : "Unavailable fencer"}{" "}
                             <button
                               className="icon-btn"
                               onClick={() =>
@@ -571,7 +618,7 @@ export function RunEvent() {
                     <option value="">Choose fencer</option>
                     {registered.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {f.display_name}
+                        {competitorLabel(f, allFencers)}
                       </option>
                     ))}
                   </select>
@@ -656,7 +703,7 @@ export function RunEvent() {
                 .map((b) => (
                   <div className="button-row" key={b.id}>
                     <span>
-                      {b.format} · {b.id.slice(0, 8)}
+                      {b.format} · {phases.data.find((p) => p.id === b.phase_id)?.name ?? "Event phase"}
                       {b.is_archived ? " · Archived" : ""}
                     </span>
                     {!b.is_archived && (

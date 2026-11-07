@@ -8,7 +8,6 @@ export default function MatchReport({
   onEdit,
   onBack,
   onNew,
-  onExport,
   onCsv,
 }: {
   match: LiveMatch;
@@ -17,7 +16,6 @@ export default function MatchReport({
   onEdit: () => void;
   onBack: () => void;
   onNew: () => void;
-  onExport: () => void;
   onCsv: () => void;
 }) {
   const report = reportModel(operations, match.left_score, match.right_score);
@@ -161,17 +159,17 @@ export default function MatchReport({
               </text>
             </svg>
           ) : (
-            <p>No historical score snapshots available.</p>
+            <p>There are no saved score changes to graph for this match.</p>
           )}
           {!report.graphReconciled && (
             <p>
-              Current authoritative endpoint: {match.left_score} –{" "}
-              {match.right_score}. Historical snapshots do not provide this
-              endpoint.
+              Saved score: {match.left_score} –{" "}
+              {match.right_score}. The earlier score snapshots do not fully
+              account for this total.
             </p>
           )}
           <details>
-            <summary>Progression Data</summary>
+            <summary>View score history table</summary>
             <table>
               <thead>
                 <tr>
@@ -194,7 +192,7 @@ export default function MatchReport({
         </section>
         <section className="report-breakdown match-rail">
           <h3>Scoring Breakdown</h3>
-          <p>Net awarded points</p>
+          <p>Points including recorded corrections and nullifications</p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -238,13 +236,22 @@ export default function MatchReport({
           )}
         </section>
       </div>
-      <details>
-        <summary>Settings and Provenance</summary>
-        <pre>{JSON.stringify(match, null, 2)}</pre>
-      </details>
+      <section className="report-context" aria-label="Match settings">
+        <h3>Match Settings</h3>
+        <p>
+          {match.event_name || "Standalone Match"}
+          {match.round_name ? ` · ${match.round_name}` : ""}
+          {" · "}
+          {match.match_type === "knockout" ? "Knockout" : "Standard"}
+        </p>
+        <p>
+          Duration: {Math.round(match.duration_ms / 1000)} seconds
+          {" · "}Score to Win: {match.target_score ?? "No Target"}
+          {match.is_overtime ? " · Overtime enabled" : ""}
+        </p>
+      </section>
       <div className="button-row">
-        <button onClick={onExport}>Export Report</button>
-        <button onClick={onCsv}>Export CSV</button>
+        <button onClick={onCsv}>Download Match CSV</button>
       </div>
     </section>
   );
