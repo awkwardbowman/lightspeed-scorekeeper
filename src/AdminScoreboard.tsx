@@ -172,8 +172,8 @@ export default function AdminScoreboard({
       </div>
       {feedback}
       <div className="admin-columns">
-        <details className="match-rail log-rail" open>
-          <summary>Match Log</summary>
+        <section className="match-rail log-rail" aria-label="Match Log">
+          <h3>Match Log</h3>
           <MatchLog
             names={{
               left: match.current_left_name,
@@ -183,7 +183,7 @@ export default function AdminScoreboard({
             busy={busy || dirty}
             onReverse={(id) => void onReverse(id)}
           />
-        </details>
+        </section>
         <div className="admin-center">
           <div className="live-arena">
             {side("left")}
@@ -304,10 +304,10 @@ export default function AdminScoreboard({
             </button>
           </div>
         </div>
-        <details className="match-rail card-rail" open>
-          <summary>Previous Cards</summary>
+        <section className="match-rail card-rail" aria-label="Previous Cards">
+          <h3>Previous Cards</h3>
           <CardHistory match={match} operations={operations} />
-        </details>
+        </section>
       </div>
       <footer className="live-bottom">
         <button className="primary" disabled={busy} onClick={exit}>
