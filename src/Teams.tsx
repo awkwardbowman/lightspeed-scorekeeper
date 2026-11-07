@@ -859,11 +859,12 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
               <a href={teamHref("clone", t.id, event.id)}>Clone</a>
               <button
                 disabled={a.busy || t.assignment_locked}
-                onClick={() =>
+                onClick={() => {
+                  if (!window.confirm(`Unassign ${t.name} from ${event.name}? Confirm there are no scheduled matches or historical results depending on this assignment. Locked teams cannot be unassigned.`)) return;
                   void a.run(() =>
                     command("edit", t.id, t.revision, { event_id: null }),
-                  )
-                }
+                  );
+                }}
               >
                 Unassign
               </button>
