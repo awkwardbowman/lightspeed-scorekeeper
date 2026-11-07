@@ -159,17 +159,17 @@ export default function MatchReport({
               </text>
             </svg>
           ) : (
-            <p>No historical score snapshots available.</p>
+            <p>There are no saved score changes to graph for this match.</p>
           )}
           {!report.graphReconciled && (
             <p>
-              Current authoritative endpoint: {match.left_score} –{" "}
-              {match.right_score}. Historical snapshots do not provide this
-              endpoint.
+              Saved score: {match.left_score} –{" "}
+              {match.right_score}. The earlier score snapshots do not fully
+              account for this total.
             </p>
           )}
           <details>
-            <summary>Progression Data</summary>
+            <summary>View score history table</summary>
             <table>
               <thead>
                 <tr>
@@ -192,7 +192,7 @@ export default function MatchReport({
         </section>
         <section className="report-breakdown match-rail">
           <h3>Scoring Breakdown</h3>
-          <p>Net awarded points</p>
+          <p>Points including recorded corrections and nullifications</p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -251,7 +251,7 @@ export default function MatchReport({
         </p>
       </section>
       <div className="button-row">
-        <button onClick={onCsv}>Export CSV</button>
+        <button onClick={onCsv}>Download Match CSV</button>
       </div>
     </section>
   );
