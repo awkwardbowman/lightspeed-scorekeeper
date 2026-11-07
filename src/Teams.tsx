@@ -8,7 +8,7 @@ import {
   type TeamMember,
 } from "./data";
 import { ImagePicker, ImagePreview, useHashParams } from "./Images";
-import { BackLink, Intro, Notice, useAction, useRows } from "./ui";
+import { BackLink, describeChanges, Intro, Notice, useAction, useRows } from "./ui";
 const base = "/events/teams";
 function teamHref(mode: string, id?: string, event?: string) {
   return `#${base}?mode=${mode}${id ? `&id=${encodeURIComponent(id)}` : ""}${event ? `&return_event=${encodeURIComponent(event)}` : ""}`;
@@ -795,7 +795,7 @@ function TeamHistory({
             <summary>
               {a.action} · {new Date(a.recorded_at).toLocaleString()} · Audit record
             </summary>
-            <p>Change details are retained in the audit history.</p>
+            <p>{describeChanges(a.old_value, a.new_value)}</p>
           </details>
         ))}
       <Notice error={audits.error} />
