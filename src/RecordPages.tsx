@@ -204,7 +204,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
       <Notice error={r.error || presets.error} loading={r.loading} />
       {notice && <p role="status">{notice}</p>}
       {mode === "lookup" ? (
-        <section className="card">
+        <section className="card record-lookup">
           <div className="button-row">
             <a className="primary" href={href("create")}>
               New {def.name}
@@ -500,9 +500,17 @@ export function RecordPage({ entity }: { entity: Entity }) {
             entity === "users" &&
             selected &&
             mayEdit(selected) && (
-              <a className="danger" href={href("delete", id)}>
-                Delete account access…
-              </a>
+              <section className="danger-zone" aria-label="Danger Zone">
+                <h3>Danger Zone</h3>
+                <p>
+                  Delete this user's account access only when disabling it is
+                  insufficient. This preserves historical attribution and requires
+                  a separate email-confirmation screen.
+                </p>
+                <a className="danger" href={href("delete", id)}>
+                  Delete Account Access…
+                </a>
+              </section>
             )}
           {mode === "edit" &&
             selected &&
