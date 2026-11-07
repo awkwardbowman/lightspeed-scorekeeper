@@ -36,3 +36,22 @@ Implementation should follow this living file and update the canonical DESIGN.md
 - Management lookups: shared responsive max-width and compact bordered right-aligned links; dark navy/amber button and dialog CSS (styles b70bbd8); distinct filtered empty-state (RecordPages 1fa58ac). Match History: official winner-driven emphasis, readable grouped score, selected row, explicit sort and empty state (History 1ab9e44/4683dd1/6bd04f4; CSS ce84dcb).
 - Added browser assertions for Abandon and persisted-result protection, Teams tile, danger route Cancel, winner-aware History, sort and no-results; updated full-release navigation audit fixture for post-Abandon state. **Tests have not been executed**, and none of these branch changes are merged/deployed. Run T3 and review all browser failures before accepting.
 - LEFT FOR IMPLEMENTATION MODEL: preset match-type schema and Prep integration, date-only Events migration, full-screen Admin Mode layout/winner editing/claims, Match Report graph/score breakdown and post-finalization correction, full palette/accessibility sweep, event detail restructuring, Fencer History.
+
+## Non-Live Match UX audit suggestions — PROPOSED, not implemented (2026-11-06)
+Prioritized heuristic review and reusable UX baseline live in DESIGN.md §17 and the shared Google Doc. Reviewed source, not browser; avoid confusing these recommendations with already committed PR #8 changes.
+
+P1 SMALL/SMALL-MEDIUM (recommended next micro-fix batch):
+- Separate saved/success status from errors and screen reader alerts (ui.tsx Notice/useAction).
+- Dirty-form Cancel warnings for RecordPages, Teams and Configuration (only on changes).
+- Shared lookup Clear Filters / visible result counts, without altering search semantics.
+- Rename Presets Dashboard tile from Create Match Preset to Manage Match Presets (lookup destination).
+- Show Restore vs Archive title accurately on the image archive confirmation page.
+- Suppress Team/Image false "No results" messages while loading; explain empty vs filtered-out.
+- Sort Teams by display Event name instead of UUID.
+- Style Events Void as danger, not equal to Open.
+
+P2 SMALL: contextual status/role labels; event row Registrations vs Team Assignments; remove irrelevant Standalone scope on Event History; separate Fencer History picker and match search; explain stale image preview; show understandable uploader names / Copy ID.
+
+P2 MEDIUM: friendly grouped keyboard shortcut labels with inline conflict validation; prevent Configuration partial-save from discarding other unsaved fields; consistent accessible in-app danger confirmations; reduce five-action Team row clutter on mobile; hide/disable unsupported planning-only modes where product semantics permit.
+
+Only schedule or implement after testing the newly committed UI branch (build + browser/T3). Preserve approved complex PR #8 match/preset/server work as separate scope.
