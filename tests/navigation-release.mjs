@@ -203,9 +203,13 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
   assert.equal(new URL(page.url()).hash, "#/configuration/team-images");
 
+  // Reopen the saved fixture bout after the normal browser test explicitly
+  // abandoned the screen; Abandon must never delete or auto-reopen it.
+  await navigate("/history/matches");
+  await page.evaluate((id) => sessionStorage.setItem("openMatch", id), fixtures.matchId);
+  await navigate("/single-match");
   // A real previously broken control: X / Escape on Manage while its nested
   // Admin mode is displayed. A native confirm must protect staged changes.
-  await navigate("/single-match");
   await page.getByRole("button", { name: "Manage", exact: true }).waitFor();
   await page.getByRole("button", { name: "Manage", exact: true }).click();
   await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
@@ -227,8 +231,15 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   page.once("dialog", (prompt) => prompt.accept());
   await page.keyboard.press("Escape");
   await page.locator('dialog[open]').waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+  page.once("dialog", (prompt) => prompt.accept());
+  await page.getByRole("button", { name: "Abandon Match", exact: true }).click();
+  await page.waitForURL("**/#/");
+  await navigate("/single-match");
+  await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
 
   console.log(
-    `PASS full-release navigation: ${routes.length} routes, ${internalLinks} visible internal links validated, ${counts.buttons} JSX buttons/${counts.links} links audited; Create/Edit/Archive/Restore/Delete Cancel, clone picker, team/image exits, nested penalty X, Manage X/Escape.`,
+    `PASS full-release navigation: ${routes.length} routes, ${internalLinks} visible internal links validated, ${counts.buttons} JSX buttons/${counts.links} links audited; Create/Edit/Archive/Restore/Delete Cancel, clone picker, team/image exits, nested penalty X, Manage X/Escape, Abandon Match return.`,
   );
 }
