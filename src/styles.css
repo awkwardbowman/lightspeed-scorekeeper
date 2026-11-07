@@ -539,7 +539,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .stepper button { padding:.4rem .65rem; }
 .stepper span { font-size:.8rem; }
 .match-rail { min-width:0; border:1px solid var(--border); background:var(--panel-bg); border-radius:12px; padding:.65rem; overflow-wrap:anywhere; }
-.match-rail > summary { font-size:1.1rem; font-weight:750; cursor:pointer; padding:.5rem 0; }
+.match-rail > h3 { font-size:1.1rem; font-weight:750; margin:.5rem 0; padding:.3rem 0; }
 .match-rail table, .match-rail tbody, .match-rail tr, .match-rail td { display:block; width:auto; }
 .match-rail thead { position:absolute; clip-path:inset(50%); width:1px; height:1px; overflow:hidden; }
 .match-rail td { padding:.2rem 0; border:0; font-size:.8rem; text-align:left; }
@@ -608,3 +608,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .copy-id .copy-id-button { width:36px; height:36px; display:inline-flex; justify-content:center; align-items:center; padding:7px; border:1px solid #44566f; border-radius:8px; color:#e9edf6; background:#263449; }
 .copy-id .copy-id-button:hover { background:#35465d; }
 .copy-id small[role="status"] { flex-basis:100%; color:#a8c8e1; }
+
+/* Match Log nullification is an intentional audit-preserving command. */
+.log-nullify { min-height:36px; padding:6px 10px; font-size:.78rem; }
