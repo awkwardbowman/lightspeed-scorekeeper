@@ -414,8 +414,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           {list.map((m) => {
             // The authoritative adjudicated winner can differ from the
             // numeric score following an audited referee override.
-            const leftWon = Boolean(m.finalized_at) && m.winner_side === "left";
-            const rightWon = Boolean(m.finalized_at) && m.winner_side === "right";
+            const leftWon = Boolean(m.finalized_at) && !m.is_void &&
+              m.outcome !== "draw" && m.winner_side === "left";
+            const rightWon = Boolean(m.finalized_at) && !m.is_void &&
+              m.outcome !== "draw" && m.winner_side === "right";
             const result = !m.finalized_at
               ? "Incomplete"
               : m.outcome === "draw"
