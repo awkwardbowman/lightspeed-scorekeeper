@@ -330,7 +330,7 @@ function AssetGallery({
     .filter(
       (x) =>
         (filter === "all" || x.is_archived === (filter === "archived")) &&
-        `${x.display_name} ${x.id}`
+        `${x.display_name}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
