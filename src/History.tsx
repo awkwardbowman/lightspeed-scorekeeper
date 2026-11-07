@@ -399,26 +399,49 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           </select>
         </label>
         <div className="selection-list">
-          {list.map((m) => (
-            <button
-              className="list-item"
-              key={m.id}
-              onClick={() => setMatchId(m.id)}
-            >
-              <strong>
-                {m.current_left_name} {m.left_score}–{m.right_score}{" "}
-                {m.current_right_name}
-              </strong>
-              <small>
-                {new Date(m.created_at).toLocaleString()} · {m.outcome}
-                {m.is_archived
-                  ? " · Archived"
-                  : m.is_void
-                    ? " · Void"
-                    : ""} · {m.id.slice(0, 8)}
-              </small>
-            </button>
-          ))}
+          {list.map((m) => {
+            // The authoritative adjudicated winner can differ from the
+            // numeric score following an audited referee override.
+            const leftWon = Boolean(m.finalized_at) && m.winner_side === "left";
+            const rightWon = Boolean(m.finalized_at) && m.winner_side === "right";
+            const result = !m.finalized_at
+              ? "Incomplete"
+              : m.outcome === "draw"
+                ? "Draw"
+                : leftWon
+                  ? `${m.current_left_name} Wins`
+                  : rightWon
+                    ? `${m.current_right_name} Wins`
+                    : m.outcome;
+            return (
+              <button
+                className="list-item"
+                key={m.id}
+                aria-pressed={matchId === m.id}
+                onClick={() => setMatchId(m.id)}
+              >
+                <span className="match-history-summary">
+                  <span className={leftWon ? "match-winner" : ""}>{m.current_left_name}</span>
+                  <span className="match-vs">vs</span>
+                  <span className={rightWon ? "match-winner" : ""}>{m.current_right_name}</span>
+                  <span className="match-history-score">
+                    [ <span className={leftWon ? "match-winner" : ""}>{m.left_score}</span>
+                    {" "}to{" "}
+                    <span className={rightWon ? "match-winner" : ""}>{m.right_score}</span> ]
+                  </span>
+                  <span className="match-history-outcome">{result}</span>
+                </span>
+                <small>
+                  {new Date(m.created_at).toLocaleString()}
+                  {m.is_archived
+                    ? " · Archived"
+                    : m.is_void
+                      ? " · Void"
+                      : ""} · {m.id.slice(0, 8)}
+                </small>
+              </button>
+            );
+          })}
         </div>
       </section>
       {match && (
