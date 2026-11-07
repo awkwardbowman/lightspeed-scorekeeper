@@ -136,7 +136,8 @@ export default function Teams() {
       </Intro>
       {notice && <p role="status">{notice}</p>}
       <Notice
-        error={teams.error || events.error || assets.error || a.status}
+        error={teams.error || events.error || assets.error || a.error}
+        success={a.status}
         loading={teams.loading}
       />
       {mode === "lookup" || (mode === "clone" && !selected) ? (
@@ -554,7 +555,7 @@ function TeamEditor({
           />
         )}
       </form>
-      <Notice error={a.status} />
+      <Notice error={a.error} success={a.status} />
     </section>
   );
 }
@@ -683,7 +684,8 @@ function Roster({
           ))}
       </ul>
       <Notice
-        error={members.error || fencers.error || a.status}
+        error={members.error || fencers.error || a.error}
+        success={a.status}
         loading={members.loading || fencers.loading}
       />
     </>
@@ -843,7 +845,8 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
         </>
       )}
       <Notice
-        error={teams.error || assets.error || a.status}
+        error={teams.error || assets.error || a.error}
+        success={a.status}
         loading={teams.loading}
       />
     </section>
