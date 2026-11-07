@@ -462,6 +462,18 @@ try {
     await page
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
+    // Notes stay in the editor/database, not in the Fencer lookup table.
+    assert.equal(
+      await page.getByRole("columnheader", { name: "Affiliation", exact: true }).count(),
+      1,
+    );
+    assert.equal(
+      await page.getByRole("row")
+        .filter({ hasText: "Browser Fencer" })
+        .getByText("Notes", { exact: true }).count(),
+      0,
+      "Fencer lookup must not expose an expandable Notes control",
+    );
     assert.equal(
       (
         await q(
@@ -475,6 +487,11 @@ try {
       .filter({ hasText: "Browser Fencer" })
       .getByRole("link", { name: "Edit", exact: true })
       .click();
+    assert.equal(
+      await page.getByLabel("Notes", { exact: true }).inputValue(),
+      "Keyboard and touch notes",
+      "Fencer notes must still be stored and editable",
+    );
     await page
       .getByLabel("Display name", { exact: true })
       .fill("Renamed Browser Fencer");
