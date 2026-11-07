@@ -1,4 +1,6 @@
-import { operationLabel, type Operation } from "./liveMatch";
+import { operationLabel, signed, type Operation } from "./liveMatch";
+import { type Profile } from "./data";
+import { useRows } from "./ui";
 export default function MatchLog({
   operations,
   busy = false,
@@ -10,6 +12,8 @@ export default function MatchLog({
   busy?: boolean;
   onReverse?: (id: string) => void;
 }) {
+  const users = useRows<Profile>("tUser");
+  const actor = (o: Operation) => users.data.find((u) => u.id === o.actor_id)?.display_name ?? (o.actor_id ? "Former referee" : "System");
   const label = (o: Operation) =>
     names
       ? operationLabel(o).replace(
@@ -43,7 +47,7 @@ export default function MatchLog({
           <tr>
             <th>Local Time</th>
             <th>Action</th>
-            <th>Score after action</th>
+            <th>Recorded score then</th>
             <th>Status / Override</th>
           </tr>
         </thead>
@@ -73,6 +77,7 @@ export default function MatchLog({
                 </td>
                 <td>
                   {humanLabel(o)}
+                  <small className="muted"> · by {actor(o)}</small>
                 </td>
                 <td>
                   {o.data.snapshotUnavailable
@@ -89,7 +94,7 @@ export default function MatchLog({
                       aria-label={`Nullify log entry: ${label(o)}`}
                       disabled={busy}
                       onClick={() => {
-                        if (window.confirm(`Nullify ${label(o)}? Its score effect will be reversed. The original entry and this override will remain in the audit history.`))
+                        if (window.confirm(`Nullify ${label(o)}?\nRecorded: ${new Date(o.recorded_at).toLocaleString()} by ${actor(o)}\nScore effect being reversed: ${names?.left ?? "Left"} ${signed(o.left_delta)}, ${names?.right ?? "Right"} ${signed(o.right_delta)}.\nThe original entry and the new override will remain in the audit history.`))
                           onReverse(o.id);
                       }}
                     >
@@ -107,7 +112,7 @@ export default function MatchLog({
         <p>No operations recorded yet.</p>
       )}
       {Boolean(onReverse) && (
-        <p className="muted">Nullify scoring calls, cards and score corrections here. Timer, target and outcome changes use their dedicated Admin controls; every override remains in the audit history.</p>
+        <p className="muted">The score shown for each entry is the historical total at that time; later Nullify operations change the effective score. Nullify scoring calls, cards and score corrections here. Timer, target and outcome changes use dedicated Admin controls. Every override remains in the audit history.</p>
       )}
     </div>
   );
