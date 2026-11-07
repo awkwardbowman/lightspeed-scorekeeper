@@ -1,6 +1,6 @@
 # Scorekeeper Selective Testing Policy
 
-Last reviewed: 2026-11-06. Initial implementation based on application version 0.4.0.
+Last reviewed: 2026-11-07. Initial implementation based on application version 0.4.0.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ This policy covers automated *local/CI* verification. Hosted Supabase migrations
 | --- | --- | --- |
 | T0 Smoke | Production build + tournament and match-command tests | Every code change in normal development |
 | T1 Targeted | T0 + changed feature area, cross-feature dependencies, and selected test suites | Normal PRs and focused changes |
-| T2 Integration | Production build + all six non-browser test suites | Multi-system features, cross-module refactors, permissions or database contract changes |
+| T2 Integration | Production build + all seven non-browser test suites | Multi-system features, cross-module refactors, permissions or database contract changes |
 | T3 Full Regression | T2 + Playwright browser suite | Major releases, scoring/security/schema changes before production acceptance, or explicit request |
 | T4 Hosted Release Acceptance | Targeted manual tests against the exact deployed SHA, migration and functions | Coordinated releases where hosted behavior and permissions matter |
 
@@ -27,10 +27,11 @@ The tiers are **not SemVer numbers**. A patch release touching a scoring permiss
 | `match` | `tests/match-redesign.test.mjs` | Ledger, referee claim, points, cards, reversals, retries, overtime, winner corrections | C0 (critical) |
 | `database` | `tests/database.test.mjs` | Migrations, shared RLS, audit retention, persistence, permissions, standings | C0 |
 | `tournament` | `tests/tournament.test.mjs` | Group round-robin, elimination brackets, byes, grand-final reset | C0 |
+| `phases` | `tests/phases.test.mjs` | Legacy phase/group reconciliation, seeded memberships, canonical server graphs, generations/retries, preset snapshots, automatic advancement, archive isolation, frozen results and RLS | C0 |
 | `account` | `tests/account-endpoint.test.mjs` | Invitations, password changes, roles, session/account authorization | C0 |
 | `teams` | `tests/team-instances.test.mjs` | Team lineage, cloning, rosters, assignments, snapshots, storage policies | C1 (high) |
 | `images` | `tests/image-assets.test.mjs` | Image validation, WebP decoder, upload retry, immutability, error recovery | C1 |
-| `browser` | `tests/browser.test.mjs` | Actual UI paths through disposable PostgreSQL/fixture transport, including team/image flows | C0 for changed live-match/auth screens; C1 for other covered UI workflows |
+| `browser` | `tests/browser.test.mjs` | Actual UI paths through disposable PostgreSQL/fixture transport, including team/image and phase flows (`tests/phase-browser.mjs`) | C0 for changed live-match/auth screens; C1 for other covered UI workflows |
 | Full-release navigation audit | `tests/navigation-release.mjs` (invoked by `browser` only under T3) | All registered route renders, link-target registry, JSX button/link wiring, dismiss/Cancel/Back/X/Escape, nested pickers, unsaved-change discard | C1; required on every T3 full release |
 
 Tests not yet written cannot be counted as passing. In particular, the browser suite is one large integration file, not individual page-level suites, so browser selection currently runs the *whole* browser file. Deferrable Control Point and Traditional team execution remain outside the implemented feature scope.
@@ -68,7 +69,7 @@ npx playwright install chromium
 npm run test:full
 
 # Backward-compatible historical commands:
-npm test              # all six non-browser suites
+npm test              # all seven non-browser suites
 npm run test:browser   # browser only
 ```
 
@@ -84,7 +85,7 @@ All selector-driven commands run `npm run build` first by default; `--no-build` 
 - Events and record relationships: tournament + match + database + teams; browser is relevant.
 - History: match + database + teams; browser is relevant.
 - Configuration: database + account + match + teams; browser is relevant.
-- Shared database access, SQL schema fixtures, migrations, toolchain, or unknown code changes: all six non-browser suites; browser is relevant.
+- Shared database access, SQL schema fixtures, migrations, toolchain, or unknown code changes: all seven non-browser suites; browser is relevant.
 - Basic UI shell/style changes: T0 + browser when selected.
 - Docs-only changes: no automated tests needed.
 

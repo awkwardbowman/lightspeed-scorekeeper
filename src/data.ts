@@ -27,6 +27,7 @@ export async function manage<T = { ok: boolean }>(
 export async function rows<T>(table: string): Promise<T[]> {
   const orders: Record<string, string[]> = {
     tEventFencer: ["event_id", "fencer_id"],
+    tPhaseRegistration: ["phase_id", "fencer_id"],
     tEventTeam: ["event_id", "team_id"],
     tTeamFencer: ["team_id", "fencer_id"],
     tEventTeamFencer: ["event_id", "team_id", "fencer_id"],
@@ -75,6 +76,7 @@ export interface Fencer {
   is_unregistered: boolean;
 }
 export interface Preset {
+  updated_at?: string;
   match_type: "standard" | "knockout";
   id: string;
   name: string;
@@ -123,6 +125,13 @@ export interface Standing {
   differential: number;
 }
 export interface MatchRow {
+  match_sequence: number | null;
+  schedule_ready: boolean;
+  is_bye: boolean;
+  phase_name: string | null;
+  phase_name_snapshot: string | null;
+  phase_settings_snapshot: Record<string,unknown> | null;
+  started_at: string | null;
   id: string;
   event_id: string | null;
   phase_id: string | null;

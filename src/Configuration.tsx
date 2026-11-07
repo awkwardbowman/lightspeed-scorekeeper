@@ -22,21 +22,30 @@ export default function Configuration({
   const [order, setOrder] = useState<string[]>([]);
   const [keys, setKeys] = useState<Record<string, string>>({});
   const baseline = useRef<Config | null>(null);
+  const touched = useRef({
+    reasons: false,
+    overtime: false,
+    order: false,
+    keys: false,
+  });
   useEffect(() => {
     if (r.data[0]) {
       const old = baseline.current;
       setOrder((value) =>
-        !old || JSON.stringify(value) === JSON.stringify(old.tiebreakers)
+        (!old && !touched.current.order) ||
+        (old && JSON.stringify(value) === JSON.stringify(old.tiebreakers))
           ? r.data[0].tiebreakers
           : value,
       );
       setReasons((value) =>
-        !old || value === old.penalty_reasons.join("\n")
+        (!old && !touched.current.reasons) ||
+        (old && value === old.penalty_reasons.join("\n"))
           ? r.data[0].penalty_reasons.join("\n")
           : value,
       );
       setOvertime((value) =>
-        !old || value === old.overtime_ms / 1000
+        (!old && !touched.current.overtime) ||
+        (old && value === old.overtime_ms / 1000)
           ? r.data[0].overtime_ms / 1000
           : value,
       );
@@ -47,7 +56,8 @@ export default function Configuration({
           ),
         );
       setKeys((value) =>
-        !old || JSON.stringify(value) === JSON.stringify(supported(old))
+        (!old && !touched.current.keys) ||
+        (old && JSON.stringify(value) === JSON.stringify(supported(old)))
           ? supported(r.data[0])
           : value,
       );
@@ -82,7 +92,10 @@ export default function Configuration({
                 Selectable reason tiles (one per line)
                 <textarea
                   value={reasons}
-                  onChange={(e) => setReasons(e.target.value)}
+                  onChange={(e) => {
+                    touched.current.reasons = true;
+                    setReasons(e.target.value);
+                  }}
                 />
               </label>
               <label>
@@ -92,7 +105,10 @@ export default function Configuration({
                   min={1}
                   max={60}
                   value={overtime}
-                  onChange={(e) => setOvertime(Number(e.target.value))}
+                  onChange={(e) => {
+                    touched.current.overtime = true;
+                    setOvertime(Number(e.target.value));
+                  }}
                 />
               </label>
               <button
@@ -142,7 +158,10 @@ export default function Configuration({
                       : "Total points scored"}{" "}
                     <button
                       className="icon-btn"
-                      onClick={() => setOrder(order.filter((x) => x !== k))}
+                      onClick={() => {
+                        touched.current.order = true;
+                        setOrder(order.filter((x) => x !== k));
+                      }}
                     >
                       Remove
                     </button>
@@ -150,6 +169,7 @@ export default function Configuration({
                       <button
                         className="icon-btn"
                         onClick={() => {
+                          touched.current.order = true;
                           const next = [...order];
                           [next[i - 1], next[i]] = [next[i], next[i - 1]];
                           setOrder(next);
@@ -168,7 +188,10 @@ export default function Configuration({
                     <button
                       key={k}
                       className="subtle"
-                      onClick={() => setOrder([...order, k])}
+                      onClick={() => {
+                        touched.current.order = true;
+                        setOrder([...order, k]);
+                      }}
                     >
                       Add{" "}
                       {k === "differential"
@@ -214,6 +237,7 @@ export default function Configuration({
                       aria-label={`Shortcut ${action}`}
                       value={keys[action] ?? ""}
                       onChange={(e) => {
+                        touched.current.keys = true;
                         const next = { ...keys };
                         if (e.target.value)
                           next[action] = e.target.value.toLowerCase();

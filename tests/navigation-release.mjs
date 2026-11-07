@@ -21,6 +21,8 @@ const components = [
   "AdminScoreboard",
   "CardHistory",
   "MatchReport",
+  "PhasePages",
+  "BracketView",
 ];
 
 function jsxTag(node, source) {

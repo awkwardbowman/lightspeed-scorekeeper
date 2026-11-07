@@ -1,6 +1,6 @@
 # Approved next scope — small management fixes and event phases
 
-Status: design approved, implementation not started. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
+Status: large L1–L5 implementation prepared on `codex/event-phases`; local T3 regression passed; not deployed. See [DESIGN.md §22](DESIGN.md) and [PHASES_RELEASE.md](PHASES_RELEASE.md). The small-management workstream remains separate. PR #8 is released; see [DESIGN.md §20](DESIGN.md). The authoritative next requirements and acceptance criteria are [DESIGN.md §21](DESIGN.md), synchronized with the shared design Doc. No PR number is reserved by this plan.
 
 ## Small / offloadable work
 
@@ -39,4 +39,4 @@ L1 establishes the contract for L2–L4. L2's authoritative fixtures/sequence/ge
 
 ## Verification and release
 
-Documentation only. No application changes, migrations or deployment are performed by this update. Small UI work needs focused validation; phase schema/scoring/advancement changes require T3 full regression plus appropriate hosted T4 acceptance. Keep existing event snapshots, auth/RLS, audit, idempotency and referee controls intact.
+The phase branch includes application code, the additive phase workflow migration and local SQL/browser verification. No hosted migration or deployment has been performed. Necessary S8 navigation/lifecycle placement and phase-specific S7 filtering are included; broader small work remains separate. Small UI work needs focused validation; phase schema/scoring/advancement changes require T3 full regression plus appropriate hosted T4 acceptance. Keep existing event snapshots, auth/RLS, audit, idempotency and referee controls intact.

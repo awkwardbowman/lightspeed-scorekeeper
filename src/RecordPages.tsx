@@ -404,6 +404,16 @@ export function RecordPage({ entity }: { entity: Entity }) {
                               </a>
                             </>
                           )}
+                          {entity === "events" && (
+                            <a
+                              href={`#/run-event?event=${x.id}`}
+                              onClick={() =>
+                                sessionStorage.setItem("event", x.id)
+                              }
+                            >
+                              Run Event
+                            </a>
+                          )}
                           {(entity === "events" || entity === "teams") && (
                             <a href={href("relationships", x.id)}>
                               {x.competition_format === "team"
@@ -546,27 +556,15 @@ export function RecordPage({ entity }: { entity: Entity }) {
                     : "Registrations"}
                 </a>
                 {selected.mode === "traditional" &&
-                  selected.competition_format === "individual" &&
-                  [
-                    ["/run-event", "Phases and Groups"],
-                    ["/run-event/bracket", "Bracket"],
-                    ["/run-event/matches", "Matches"],
-                    ["/run-event/standings", "Standings"],
-                  ].map(([route, label]) => (
+                  selected.competition_format === "individual" && (
                     <a
                       className="secondary"
-                      key={route}
-                      href={`#${route}`}
-                      onClick={() => sessionStorage.setItem("event", id)}
+                      href={`#/events/phases?event=${id}`}
                     >
-                      {label}
+                      Manage Phases
                     </a>
-                  ))}
+                  )}
               </nav>
-              <EventStatus
-                event={selected as unknown as EventRecord}
-                onDone={r.reload}
-              />
             </section>
           ) : mode === "relationships" && selected ? (
             <>
@@ -580,16 +578,6 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   ) : (
                     <Registration eventId={id} />
                   )}
-                  <EventStatus
-                    event={selected as unknown as EventRecord}
-                    onDone={r.reload}
-                  />
-                  <a
-                    href="#/run-event"
-                    onClick={() => sessionStorage.setItem("event", id)}
-                  >
-                    Run event
-                  </a>
                 </>
               ) : (
                 <a href="#/events/teams">Manage team instances and rosters</a>
@@ -844,44 +832,6 @@ function InvitationPolicy() {
     </>
   );
 }
-function EventStatus({
-  event,
-  onDone,
-}: {
-  event: EventRecord;
-  onDone: () => Promise<void>;
-}) {
-  const a = useAction(onDone);
-  return (
-    <>
-      <h3>Event status: {event.status}</h3>
-      <div className="button-row">
-        {["draft", "active", "completed"]
-          .filter((s) => s !== event.status)
-          .map((s) => (
-            <button
-              key={s}
-              disabled={a.busy}
-              onClick={() => {
-                if (
-                  confirm(
-                    `Change ${event.name} to ${s}? Completing freezes standings; reopening preserves prior versions.`,
-                  )
-                )
-                  void a.run(() =>
-                    rpc("set_event_status", { p_event: event.id, p_status: s }),
-                  );
-              }}
-            >
-              {s === "active" && event.status === "completed" ? "Reopen" : s}
-            </button>
-          ))}
-      </div>
-      <Notice error={a.error} success={a.status} />
-    </>
-  );
-}
-
 function DeleteUserAccess({
   user,
   busy,
