@@ -359,13 +359,24 @@ function AssetGallery({
           <select
             aria-label="Image status"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setLimit(24);
+            }}
           >
             <option value="active">Active</option>
             <option value="archived">Archived</option>
             <option value="all">All</option>
           </select>
         </label>
+      </div>
+      <div className="record-result-summary">
+        <span role="status">{loading ? "Loading images…" : `Showing ${Math.min(filtered.length, limit)} of ${filtered.length} matching images`}</span>
+        {(search || filter !== "active") && (
+          <button type="button" className="subtle" onClick={() => { setSearch(""); setFilter("active"); setLimit(24); }}>
+            Clear filters
+          </button>
+        )}
       </div>
       <div className="image-gallery">
         {filtered.slice(0, limit).map((x) => (
@@ -408,7 +419,7 @@ function AssetGallery({
       )}
       {filtered.length > limit && (
         <button type="button" onClick={() => setLimit((n) => n + 24)}>
-          Show more images
+          Show more images (${Math.min(24, filtered.length - limit)} more)
         </button>
       )}
     </>
@@ -467,6 +478,11 @@ export default function ImageLibrary() {
             Confirm {selected.is_archived ? "restore" : "archive"}
           </button>{" "}
           <a href="#/configuration/team-images">Cancel</a>
+        </section>
+      ) : mode === "archive" && !selected && !assets.loading ? (
+        <section className="card">
+          <p role="alert">This image could not be found. It may have been removed or the link may be outdated.</p>
+          <a href="#/configuration/team-images">Return to Image Library</a>
         </section>
       ) : (
         <>
