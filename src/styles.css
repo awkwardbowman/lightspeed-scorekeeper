@@ -443,3 +443,29 @@ a.primary:focus-visible, a.danger:focus-visible {
 @media (max-width: 440px) {
   .record-lookup .fields { grid-template-columns: minmax(0,1fr); }
 }
+
+/* Match History: legible participant names, actual scores, and adjudication. */
+.match-history-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.7rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.match-history-summary .match-winner { font-weight: 850; color: var(--app-text); }
+.match-history-summary .match-vs { color: var(--app-muted); }
+.match-history-summary .match-history-score {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: var(--raised-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+}
+.match-history-summary .match-history-outcome {
+  font-size: 0.85rem;
+  font-weight: 750;
+  color: var(--app-muted);
+}
+.list-item[aria-pressed="true"] { background: var(--raised-bg); box-shadow: inset 3px 0 var(--accent); }
