@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { db, message, rows } from "./data";
-export function useRows<T>(table: string) {
+export function useRows<T>(table: string, enabled = true) {
   const [data, setData] = useState<T[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -15,8 +15,8 @@ export function useRows<T>(table: string) {
     }
   }, [table]);
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (enabled) void reload();
+  }, [reload, enabled]);
   return { data, error, loading, reload };
 }
 export function Intro({
