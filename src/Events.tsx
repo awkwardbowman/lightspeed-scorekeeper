@@ -11,7 +11,7 @@ import {
   type MatchRow,
 } from "./data";
 import { bracketGraph } from "./tournament";
-import { ArchiveFilter, Intro, Notice, Search, useAction, useRows } from "./ui";
+import { ArchiveFilter, BackLink, Intro, Notice, Search, useAction, useRows } from "./ui";
 export function useEventSelection() {
   const r = useRows<EventRecord>("tEvent");
   const [id, setIdValue] = useState(
@@ -91,33 +91,41 @@ export function Registration({ eventId }: { eventId: string }) {
   const r = useRows<{ event_id: string; fencer_id: string }>("tEventFencer");
   const a = useAction(r.reload);
   const [search, setSearch] = useState("");
+  const [registrationFilter, setRegistrationFilter] = useState("all");
+  const registeredIds = new Set(r.data.filter((x) => x.event_id === eventId).map((x) => x.fencer_id));
+  const visible = f.data.filter((competitor) =>
+    !competitor.is_unregistered &&
+    !competitor.is_archived &&
+    competitor.display_name.toLowerCase().includes(search.toLowerCase()) &&
+    (registrationFilter === "all" ||
+      registeredIds.has(competitor.id) === (registrationFilter === "registered")),
+  ).sort((a, b) =>
+    a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
+    a.id.localeCompare(b.id),
+  );
   return (
     <section>
-      <h3>Registered competitors</h3>
+      <h3>Event registrations</h3>
       <Search value={search} onChange={setSearch} />
+      <label>
+        Registration status
+        <select value={registrationFilter} onChange={(e) => setRegistrationFilter(e.target.value)}>
+          <option value="all">All</option>
+          <option value="registered">Registered</option>
+          <option value="unregistered">Unregistered</option>
+        </select>
+      </label>
+      <p role="status">{r.loading || f.loading ? "Loading competitors…" : `Showing ${visible.length} eligible fencers`}</p>
       <Notice error={r.error || f.error} />
       <div className="selection-list">
-        {f.data
-          .filter(
-            (f) =>
-              !f.is_unregistered &&
-              !f.is_archived &&
-              f.display_name.toLowerCase().includes(search.toLowerCase()),
-          )
-          .sort((a, b) =>
-            a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
-            a.id.localeCompare(b.id),
-          )
-          .map((f) => {
-            const exists = r.data.some(
-              (x) => x.event_id === eventId && x.fencer_id === f.id,
-            );
+        {visible.map((f) => {
+            const exists = registeredIds.has(f.id);
             return (
               <label className="check" key={f.id}>
                 <input
                   type="checkbox"
                   checked={exists}
-                  disabled={a.busy}
+                  disabled={a.busy || r.loading}
                   onChange={() =>
                     void a.run(async () => {
                       const q = exists
@@ -134,7 +142,7 @@ export function Registration({ eventId }: { eventId: string }) {
                     })
                   }
                 />
-                {f.display_name} <small>{f.id.slice(0, 8)}</small>
+                {f.display_name} {f.affiliation && <small>({f.affiliation})</small>}
               </label>
             );
           })}
@@ -168,6 +176,27 @@ interface Bracket {
   is_archived: boolean;
   graph: unknown;
   created_at: string;
+}
+/** Lifecycle controls are operational actions belonging to Run Event. */
+export function EventStatus({ event, onDone }: { event: EventRecord; onDone: () => Promise<void> }) {
+  const a = useAction(onDone);
+  return (
+    <section aria-label="Event lifecycle">
+      <h3>Event Status: {event.status}</h3>
+      <div className="button-row">
+        {["draft", "active", "completed"].filter((s) => s !== event.status).map((s) => (
+          <button type="button" key={s} disabled={a.busy}
+            onClick={() => {
+              if (window.confirm(`Change ${event.name} to ${s}? Completing freezes standings; reopening preserves prior versions.`))
+                void a.run(() => rpc("set_event_status", { p_event: event.id, p_status: s }));
+            }}>
+            {s === "active" && event.status === "completed" ? "Reopen" : s === "active" ? "Activate" : s === "completed" ? "Complete" : "Return to Draft"}
+          </button>
+        ))}
+      </div>
+      <Notice error={a.error} success={a.status} />
+    </section>
+  );
 }
 export function RunEvent() {
   const { profile } = useAccount();
@@ -231,9 +260,11 @@ export function RunEvent() {
   return (
     <>
       <Intro title="Run Event">
-        Assign groups manually, generate group fixtures, then select bracket
-        entrants in placement order.
+        Select the event to manage its lifecycle and run scheduled matches.
       </Intro>
+      {new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("from") === "events" && (
+        <BackLink href="#/events" />
+      )}
       <EventPicker
         events={e.data}
         id={e.id}
@@ -258,6 +289,11 @@ export function RunEvent() {
           presets.error
         }
       />
+      {e.event && (
+        <section className="card">
+          <EventStatus event={e.event} onDone={e.reload} />
+        </section>
+      )}
       {e.event &&
       (e.event.mode !== "traditional" ||
         e.event.competition_format !== "individual") ? (
@@ -276,11 +312,16 @@ export function RunEvent() {
               </p>
               {e.event.status !== "active" && (
                 <p>
-                  Activate or reopen the event under Manage Events before
+                  Use the lifecycle controls above to activate or reopen the event before
                   running matches.
                 </p>
               )}
-              <Registration eventId={e.id} />
+              <p>
+                {registered.length} registered fencers.{" "}
+                <a href={`#/events?mode=relationships&id=${encodeURIComponent(e.id)}`}>
+                  Manage Event Registrations
+                </a>
+              </p>
               <h3>Competition phases</h3>
               <form
                 className="editor inline-editor"
@@ -656,7 +697,7 @@ export function RunEvent() {
                 .map((b) => (
                   <div className="button-row" key={b.id}>
                     <span>
-                      {b.format} · {b.id.slice(0, 8)}
+                      {b.format} · {phases.data.find((p) => p.id === b.phase_id)?.name ?? "Event phase"}
                       {b.is_archived ? " · Archived" : ""}
                     </span>
                     {!b.is_archived && (
