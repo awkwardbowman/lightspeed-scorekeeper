@@ -242,16 +242,17 @@ export default function Teams() {
                           </a>
                         ) : (
                           <>
-                            <a href={teamHref("edit", t.id)}>Edit</a>
-                            <a href={teamHref("roster", t.id)}>Roster</a>
+                            <a href={teamHref("edit", t.id, returnEvent)}>Edit</a>
+                            <a href={teamHref("roster", t.id, returnEvent)}>Roster</a>
                             <details className="team-more">
                               <summary>More</summary>
-                              <a href={teamHref("clone", t.id)}>Clone</a>
-                              <a href={teamHref("history", t.id)}>History</a>
+                              <a href={teamHref("clone", t.id, returnEvent)}>Clone</a>
+                              <a href={teamHref("history", t.id, returnEvent)}>History</a>
                               <a
                                 href={teamHref(
                                   t.is_archived ? "restore" : "archive",
                                   t.id,
+                                  returnEvent,
                                 )}
                               >
                                 {t.is_archived ? "Restore" : "Archive"}
@@ -837,8 +838,8 @@ export function EventTeamAssignments({ event }: { event: EventRecord }) {
           <article className="card" key={t.id}>
             <TeamBadge team={t} assets={assets.data} />
             <div className="button-row">
-              <a href={teamHref("roster", t.id)}>Edit roster</a>
-              <a href={teamHref("edit", t.id)}>Edit team</a>
+              <a href={teamHref("roster", t.id, event.id)}>Edit roster</a>
+              <a href={teamHref("edit", t.id, event.id)}>Edit team</a>
               <a href={teamHref("clone", t.id, event.id)}>Clone</a>
               <button
                 disabled={a.busy || t.assignment_locked}
