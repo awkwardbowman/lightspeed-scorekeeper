@@ -105,7 +105,7 @@ export default function Teams() {
           (filter === "unassigned"
             ? !t.event_id && !t.is_archived
             : t.is_archived === (filter === "archived"))) &&
-        `${t.name} ${t.id} ${eventName(t)}`
+        `${t.name} ${eventName(t)}`
           .toLowerCase()
           .includes(search.toLowerCase()),
     )
