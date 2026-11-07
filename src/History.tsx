@@ -9,10 +9,12 @@ import {
   type Fencer,
   type MatchRow,
   type Standing,
+  type Profile,
 } from "./data";
 import { EventPicker, StandingsTable } from "./Events";
 import {
   ArchiveFilter,
+  BackLink,
   downloadJson,
   Intro,
   Notice,
@@ -22,6 +24,7 @@ import {
 export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
   const operations = useRows<Operation>("tMatchOperation");
   const events = useRows<EventRecord>("tEvent");
+  const users = useRows<Profile>("tUser");
   const fencers = useRows<Fencer>("tFencer");
   const matches = useRows<MatchRow>("vMatchResults");
   const calls = useRows<{
@@ -118,7 +121,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           : true) &&
       (scope === "all" ||
         (scope === "event" ? Boolean(m.event_id) : !m.event_id)) &&
-      `${m.current_left_name} ${m.current_right_name} ${m.id}`
+      `${m.current_left_name} ${m.current_right_name}`
         .toLowerCase()
         .includes(search.toLowerCase()),
   ).sort((a, b) => matchOrder === "oldest"
@@ -137,6 +140,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
         Search shared results, inspect calls and corrections, and reveal
         archived generations when needed.
       </Intro>
+      <BackLink href="#/history" />
       <Notice
         error={
           events.error ||
@@ -193,7 +197,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                 )
                 .map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.display_name} · {f.id.slice(0, 8)}
+                    {f.display_name}{f.affiliation ? ` · ${f.affiliation}` : ""}
                   </option>
                 ))}
             </select>
@@ -222,10 +226,10 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                   .map((b) => (
                     <details key={b.id}>
                       <summary>
-                        {b.format} · {b.id.slice(0, 8)}
+                        {b.format} · {p.name}
                         {b.is_archived ? " · Archived" : ""}
                       </summary>
-                      <pre>{JSON.stringify(b.graph, null, 2)}</pre>
+                      <p>Bracket generation retained. Matches and results are shown below.</p>
                     </details>
                   ))}
               </section>
@@ -254,7 +258,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     <ul>
                       {t.members.map((m) => (
                         <li key={m.id}>
-                          {m.fencer_name} · {m.fencer_id}
+                          {m.fencer_name}
                         </li>
                       ))}
                     </ul>
@@ -310,10 +314,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                       s.display_name,
                   }))}
                 />
-                <details>
-                  <summary>Ranking configuration at finalization</summary>
-                  <pre>{JSON.stringify(snap.configuration, null, 2)}</pre>
-                </details>
+                <p className="muted">The original ranking configuration is retained with this finalized standings snapshot.</p>
               </>
             )}
           </>
@@ -456,7 +457,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
                     ? " · Archived"
                     : m.is_void
                       ? " · Void"
-                      : ""} · {m.id.slice(0, 8)}
+                      : ""}
                 </small>
               </button>
             );
@@ -473,7 +474,7 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
           </h3>
           <p>
             {match.left_score}–{match.right_score} · {match.outcome} · Referee{" "}
-            {match.referee_id ?? "Not recorded"}
+            {users.data.find((u) => u.id === match.referee_id)?.display_name ?? (match.referee_id ? "Recorded referee" : "Not recorded")}
           </p>
           <div className="button-row">
             <button
@@ -545,8 +546,12 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
               </tbody>
             </table>
           </div>
-          <h4>Applied settings & provenance</h4>
-          <pre>{JSON.stringify(match, null, 2)}</pre>
+          <h4>Match details</h4>
+          <p>
+            {match.event_id ? events.data.find((e) => e.id === match.event_id)?.name ?? "Historical event" : "Standalone match"}
+            {" · "}{match.slot_key ? `Bracket slot ${match.slot_key}` : "Manual pairing"}
+            {" · "}{match.finalized_at ? `Finalized ${new Date(match.finalized_at).toLocaleString()}` : "Not finalized"}
+          </p>
           <h4>Correction audit</h4>
           {audit.data
             .filter(
@@ -560,15 +565,9 @@ export function History({ kind }: { kind: "events" | "matches" | "fencers" }) {
             .map((a) => (
               <details key={a.id}>
                 <summary>
-                  {a.recorded_at} · {a.action} · {a.actor_id ?? "System"}
+                  {new Date(a.recorded_at).toLocaleString()} · {a.action} · {users.data.find((u) => u.id === a.actor_id)?.display_name ?? "System"}
                 </summary>
-                <pre>
-                  {JSON.stringify(
-                    { before: a.old_value, after: a.new_value },
-                    null,
-                    2,
-                  )}
-                </pre>
+                <p>Correction details remain available in the retained audit evidence.</p>
               </details>
             ))}
         </section>
