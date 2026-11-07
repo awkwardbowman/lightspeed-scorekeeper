@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { db, message, rpc, type ImageAsset } from "./data";
+import { db, message, rpc, type ImageAsset, type Profile } from "./data";
 import { Intro, Notice, useAction, useRows } from "./ui";
 import { processImage, type ProcessedImage } from "./imageProcessing";
 
@@ -111,7 +111,8 @@ export function UploadImage({
   const a = useAction();
   // Never allow uploading a preview created with a previous file or setting.
   const processed =
-    prepared?.file === file &&
+    prepared &&
+    prepared.file === file &&
     prepared.quality === quality &&
     prepared.bound === bound
       ? prepared.image
@@ -321,6 +322,7 @@ function AssetGallery({
   loading?: boolean;
   loadError?: string;
 }) {
+  const uploaders = useRows<Profile>("tUser");
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState("active"),
     [limit, setLimit] = useState(24);
@@ -328,11 +330,15 @@ function AssetGallery({
     .filter(
       (x) =>
         (filter === "all" || x.is_archived === (filter === "archived")) &&
-        `${x.display_name} ${x.id}`.toLowerCase().includes(search.toLowerCase()),
+        `${x.display_name} ${x.id}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
     )
-    .sort((a, b) =>
-      a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }) ||
-      a.id.localeCompare(b.id),
+    .sort(
+      (a, b) =>
+        a.display_name.localeCompare(b.display_name, undefined, {
+          sensitivity: "base",
+        }) || a.id.localeCompare(b.id),
     );
   return (
     <>
@@ -372,7 +378,12 @@ function AssetGallery({
               {x.is_archived ? "Archived · " : ""}
               {new Date(x.created_at).toLocaleString()}
             </p>
-            <small>Uploaded by {x.owner_id}</small>
+            <small>
+              Uploaded by{" "}
+              {uploaders.data.find((u) => u.id === x.owner_id)?.display_name ||
+                "Retained Account"}
+            </small>
+            <CopyId id={x.id} />
             <div className="button-row">
               {onSelect && !x.is_archived && (
                 <button type="button" onClick={() => onSelect(x)}>
@@ -472,7 +483,34 @@ export default function ImageLibrary() {
           />
         </>
       )}
-      <Notice error={assets.error || a.error} success={a.status} loading={assets.loading} />
+      <Notice
+        error={assets.error || a.error}
+        success={a.status}
+        loading={assets.loading}
+      />
     </div>
+  );
+}
+
+export function CopyId({ id }: { id: string }) {
+  const [status, setStatus] = useState("");
+  return (
+    <span className="copy-id">
+      <code>{id.slice(0, 8)}</code>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(id);
+            setStatus("ID Copied");
+          } catch {
+            setStatus(`Copy this ID: ${id}`);
+          }
+        }}
+      >
+        Copy ID
+      </button>
+      <small role="status">{status}</small>
+    </span>
   );
 }

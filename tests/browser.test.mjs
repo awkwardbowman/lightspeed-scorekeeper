@@ -239,6 +239,7 @@ try {
     recursive: true,
   });
   const page = await browser.newPage({
+    timezoneId: "America/Los_Angeles",
     viewport: { width: 1440, height: 1000 },
   });
   const errors = [];
@@ -337,7 +338,11 @@ try {
           if (["select", "order", "offset", "limit"].includes(k)) continue;
           assert.match(k, /^[a-z_]+$/);
           if (v.startsWith("eq.")) {
-            args.push(v.slice(3));
+            args.push(
+              table === "tConfiguration" && k === "id"
+                ? v.slice(3) === "true"
+                : v.slice(3),
+            );
             where.push(`"${k}"=$${args.length}`);
           } else if (v.startsWith("in.(")) {
             const vals = v.slice(4, -1).split(",");
@@ -382,13 +387,20 @@ try {
           const vals = Object.entries(body);
           result = await q(
             `insert into public."${table}"(${vals.map(([k]) => `"${k}"`).join(",")}) values(${vals.map((_, i) => "$" + (i + 1)).join(",")}) returning *`,
-            vals.map(([, v]) => v),
+            vals.map(([, v]) =>
+              typeof v === "object" && v !== null ? json(v) : v,
+            ),
           );
         } else if (req.method() === "PATCH") {
           const vals = Object.entries(body);
           result = await q(
             `update public."${table}" set ${vals.map(([k], i) => `"${k}"=$${args.length + i + 1}`).join(",")}${filter} returning *`,
-            [...args, ...vals.map(([, v]) => v)],
+            [
+              ...args,
+              ...vals.map(([, v]) =>
+                typeof v === "object" && v !== null ? json(v) : v,
+              ),
+            ],
           );
         } else if (req.method() === "DELETE")
           result = await q(
@@ -449,16 +461,20 @@ try {
   if (!process.env.TEAM_ONLY) {
     // The shared RecordPage lookup powers Users, Fencers, Presets and Events.
     const assertIdFirst = async () => {
-      await page.getByRole("columnheader", { name: "ID", exact: true }).waitFor();
+      await page
+        .getByRole("columnheader", { name: "ID", exact: true })
+        .waitFor();
       assert.deepEqual(
-        await page.locator("table thead th").allTextContents()
+        await page
+          .locator("table thead th")
+          .allTextContents()
           .then((labels) => labels.slice(0, 2).map((label) => label.trim())),
         ["ID", "Name"],
         "Management lookup must show ID before Name",
       );
     };
     await page.goto("http://127.0.0.1:5187/#/fencers");
-    await page.getByRole("link", { name: "New fencer", exact: true }).click();
+    await page.getByRole("link", { name: "New Fencer", exact: true }).click();
     await page
       .getByLabel("Display name", { exact: true })
       .fill("Browser Fencer");
@@ -467,58 +483,97 @@ try {
       .getByLabel("Notes", { exact: true })
       .fill("Keyboard and touch notes");
     await page
-      .getByRole("button", { name: "Create fencer", exact: true })
+      .getByRole("button", { name: "Create Fencer", exact: true })
       .click();
     await page
       .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor();
     await assertIdFirst();
-    await page.locator(".notice-success").filter({ hasText: "Saved successfully." }).waitFor();
+    await page
+      .locator(".notice-success")
+      .filter({ hasText: "Saved successfully." })
+      .waitFor();
     // Fencer lookup filters are independent Name + Affiliation searches,
     // followed by Status and Sort. Other entity lookups retain broad Search.
     assert.deepEqual(
-      await page.locator(".fields > label").evaluateAll((labels) =>
-        labels.map((label) => label.firstChild?.textContent?.trim()),
-      ),
+      await page
+        .locator(".record-lookup .fields > label")
+        .evaluateAll((labels) =>
+          labels.map((label) => label.firstChild?.textContent?.trim()),
+        ),
       ["Name", "Affiliation", "Status", "Sort"],
       "Fencer filters must be ordered Name, Affiliation, Status, Sort",
     );
-    const nameFilter = page.getByRole("searchbox", { name: "Name", exact: true });
+    const nameFilter = page.getByRole("searchbox", {
+      name: "Name",
+      exact: true,
+    });
     await nameFilter.fill("OwS");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
     await nameFilter.fill("ACADE");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" }); // Affiliation text must not match Name.
     await nameFilter.fill("fEnC");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
     // Affiliation is a case-insensitive substring search, not an exact dropdown.
-    const affiliationFilter = page.getByRole("searchbox", { name: "Affiliation", exact: true });
+    const affiliationFilter = page.getByRole("searchbox", {
+      name: "Affiliation",
+      exact: true,
+    });
     await affiliationFilter.fill("cAdE");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
     await nameFilter.fill("OTHER NAME");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" }); // Matching Affiliation cannot override Name.
     await nameFilter.fill("fEnC");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
     await affiliationFilter.fill("unmatched affiliation");
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true })
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
       .waitFor({ state: "hidden" });
-    await page.getByRole("status").filter({ hasText: "No records match your filters." }).waitFor();
-    await page.getByRole("status").filter({ hasText: "Showing 0 of" }).waitFor();
-    await page.getByRole("button", { name: "Clear Filters", exact: true }).click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "No records match your filters." })
+      .waitFor();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Showing 0 of" })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Clear Filters", exact: true })
+      .click();
     assert.equal(await nameFilter.inputValue(), "");
     assert.equal(await affiliationFilter.inputValue(), "");
-    assert.equal(await page.getByRole("button", { name: "Clear Filters" }).count(), 0);
-    await page.getByRole("cell", { name: "Browser Fencer", exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "Clear Filters" }).count(),
+      0,
+    );
+    await page
+      .getByRole("cell", { name: "Browser Fencer", exact: true })
+      .waitFor();
     // Notes stay in the editor/database, not in the Fencer lookup table.
     assert.equal(
-      await page.getByRole("columnheader", { name: "Affiliation", exact: true }).count(),
+      await page
+        .getByRole("columnheader", { name: "Affiliation", exact: true })
+        .count(),
       1,
     );
     assert.equal(
-      await page.getByRole("row")
+      await page
+        .getByRole("row")
         .filter({ hasText: "Browser Fencer" })
-        .getByText("Notes", { exact: true }).count(),
+        .getByText("Notes", { exact: true })
+        .count(),
       0,
       "Fencer lookup must not expose an expandable Notes control",
     );
@@ -544,7 +599,7 @@ try {
       .getByLabel("Display name", { exact: true })
       .fill("Renamed Browser Fencer");
     await page
-      .getByRole("button", { name: "Save changes", exact: true })
+      .getByRole("button", { name: "Save Changes", exact: true })
       .click();
     await page
       .getByRole("cell", { name: "Renamed Browser Fencer", exact: true })
@@ -593,11 +648,22 @@ try {
       await page.goto(`http://127.0.0.1:5187/#/${route}`);
       await assertIdFirst();
       await page
-        .getByRole("link", { name: `New ${entity}`, exact: true })
+        .getByRole("link", {
+          name: `New ${entity[0].toUpperCase() + entity.slice(1)}`,
+          exact: true,
+        })
         .click();
       await page.getByLabel("Name", { exact: true }).fill(`Browser ${entity}`);
+      if (entity === "event") {
+        await page.getByLabel("Start Date", { exact: true }).fill("2026-11-06");
+        await page.getByLabel("End Date", { exact: true }).fill("2026-11-07");
+      }
+
       await page
-        .getByRole("button", { name: `Create ${entity}`, exact: true })
+        .getByRole("button", {
+          name: `Create ${entity[0].toUpperCase() + entity.slice(1)}`,
+          exact: true,
+        })
         .click();
       await page
         .getByRole("cell", { name: `Browser ${entity}`, exact: true })
@@ -609,7 +675,7 @@ try {
         .click();
       await page.getByLabel("Name", { exact: true }).fill(`Edited ${entity}`);
       await page
-        .getByRole("button", { name: "Save changes", exact: true })
+        .getByRole("button", { name: "Save Changes", exact: true })
         .click();
       await page
         .getByRole("cell", { name: `Edited ${entity}`, exact: true })
@@ -618,20 +684,32 @@ try {
     await page.goto("http://127.0.0.1:5187/#/users");
     await assertIdFirst();
     assert.deepEqual(
-      await page.locator("table thead th").allTextContents()
+      await page
+        .locator("table thead th")
+        .allTextContents()
         .then((labels) => labels.map((label) => label.trim())),
       ["ID", "Name", "Email", "Role", "Status", "Actions"],
       "Users lookup must give Email and Role independent columns",
     );
-    const managerRow = page.getByRole("row")
-      .filter({ has: page.getByRole("cell", { name: `${manager}@test.invalid`, exact: true }) });
+    const managerRow = page.getByRole("row").filter({
+      has: page.getByRole("cell", {
+        name: `${manager}@test.invalid`,
+        exact: true,
+      }),
+    });
     await managerRow.waitFor();
-    assert.equal(await managerRow.locator("td").nth(2).innerText(), `${manager}@test.invalid`);
-    assert.equal(await managerRow.locator("td").nth(3).innerText(), "Management",
-      "Role must not be concatenated into the Email cell");
-    await page.getByRole("link", { name: "New user", exact: true }).click();
+    assert.equal(
+      await managerRow.locator("td").nth(2).innerText(),
+      `${manager}@test.invalid`,
+    );
+    assert.equal(
+      await managerRow.locator("td").nth(3).innerText(),
+      "Management",
+      "Role must not be concatenated into the Email cell",
+    );
+    await page.getByRole("link", { name: "New User", exact: true }).click();
     await page
-      .getByRole("heading", { name: "Invite user", exact: true })
+      .getByRole("heading", { name: "Invite User", exact: true })
       .waitFor();
     assert.equal(await page.getByLabel("Email", { exact: true }).count(), 1);
     assert.equal(await page.locator("input[type=password]").count(), 0);
@@ -641,24 +719,61 @@ try {
     assert.equal(new URL(page.url()).hash, "#/presets");
     await page.goto(`http://127.0.0.1:5187/#/users?mode=edit&id=${manager}`);
     const dangerZone = page.getByRole("region", { name: "Danger Zone" });
-    await dangerZone.getByRole("link", { name: "Delete Account Access…" }).click();
-    await page.getByRole("heading", { name: "Confirm delete user access" }).waitFor();
+    await dangerZone
+      .getByRole("link", { name: "Delete Account Access…" })
+      .click();
+    await page
+      .getByRole("heading", { name: "Confirm Delete User Access" })
+      .waitFor();
     await page.getByRole("link", { name: "Cancel", exact: true }).click();
-    assert.equal((await q('select count(*)::int n from public."tUser" where id=$1', [manager]))[0].n, 1,
-      "Cancelling Delete Account Access must preserve the user");
+    assert.equal(
+      (
+        await q('select count(*)::int n from public."tUser" where id=$1', [
+          manager,
+        ])
+      )[0].n,
+      1,
+      "Cancelling Delete Account Access must preserve the user",
+    );
     await page.goto("http://127.0.0.1:5187/#/");
     await page.getByRole("link", { name: /Manage Teams/i }).click();
-    await page.getByRole("heading", { name: "Manage Teams", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Manage Teams", exact: true })
+      .waitFor();
     await page.goto("http://127.0.0.1:5187/#/single-match");
     await page
       .getByRole("heading", { name: "Match Prep", exact: true })
       .waitFor();
     await page.getByLabel("Participant name").nth(0).fill("Ari");
     await page.getByLabel("Participant name").nth(1).fill("Jordan");
-    await page.getByLabel("Score to Win (blank for no target)").fill("12");
     await page
-      .getByRole("button", { name: "Confirm match — timer stays stopped" })
-      .click();
+      .getByLabel("Preset", { exact: true })
+      .selectOption({ label: "Edited preset" });
+    assert.equal(await page.getByLabel("Length (seconds)").isDisabled(), true);
+    assert.equal(
+      await page.getByLabel("Match type", { exact: true }).isDisabled(),
+      true,
+    );
+    await page.getByLabel("Preset", { exact: true }).selectOption("");
+    assert.equal(
+      await page.getByLabel("Length (seconds)").inputValue(),
+      "",
+      "Custom clears preset-owned length",
+    );
+    assert.equal(
+      await page.getByLabel("Score to Win (blank for no target)").inputValue(),
+      "",
+    );
+    assert.equal(
+      await page.getByLabel("Match type", { exact: true }).inputValue(),
+      "",
+    );
+    await page.getByLabel("Length (seconds)").fill("180");
+    await page
+      .getByLabel("Match type", { exact: true })
+      .selectOption("standard");
+    await page.getByLabel("Score to Win (blank for no target)").fill("12");
+    await page.getByRole("button", { name: "Start Match" }).click();
     await page.getByRole("button", { name: "03:00 — Start clock" }).waitFor();
     assert.equal(
       await page.getByRole("button", { name: "left indirect +1" }).count(),
@@ -679,24 +794,65 @@ try {
       true,
     );
     await page.getByRole("button", { name: "Manage", exact: true }).click();
-    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
     await page
       .getByRole("button", { name: "Increase Left score", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Increase Remaining minutes", exact: true })
       .click();
+    await page.getByText("Match Settings", { exact: true }).click();
     await page
       .getByRole("button", { name: "Increase Score to Win", exact: true })
       .click();
+    const beforeApply = (
+      await q(`select * from public."vMatchResults" where left_name='Ari'`)
+    )[0];
+    assert.equal(
+      beforeApply.left_score,
+      3,
+      "preview must not persist before Apply",
+    );
     await page
-      .getByRole("button", { name: "Apply & close Admin Mode" })
+      .getByRole("button", { name: "Apply left score", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Admin Mode", exact: true })
-      .waitFor();
-    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-    await page.getByRole("button", { name: "Card penalty…" }).click();
+      .getByRole("button", { name: "Apply left score", exact: true })
+      .waitFor({ state: "visible" });
+    await page.waitForFunction(
+      () => document.querySelector('[aria-label="Apply left score"]')?.disabled,
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Apply Timer", exact: true })
+        .isEnabled(),
+      true,
+      "unapplied timer preview survives score save",
+    );
+    await page
+      .getByRole("button", { name: "Apply Timer", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll("button")).find(
+          (b) => b.textContent === "Apply Timer",
+        )?.disabled,
+    );
+    await page
+      .getByRole("button", { name: "Apply Score to Win", exact: true })
+      .click();
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll("button")).find(
+          (b) => b.textContent === "Apply Score to Win",
+        )?.disabled,
+    );
+    await page
+      .getByRole("button", { name: "Penalty on Ari", exact: true })
+      .click();
+    await page.screenshot({
+      path: "test-results/penalty-desktop.png",
+      fullPage: true,
+    });
     await page.getByRole("button", { name: "Red", exact: true }).click();
     await page.getByRole("button", { name: "Safety", exact: true }).click();
     await page.getByLabel("Points awarded to Jordan").fill("3");
@@ -706,12 +862,7 @@ try {
       .getByRole("button", { name: "Confirm card & award points" })
       .click();
     await page.getByRole("button", { name: "Retry pending save" }).click();
-    await page
-      .getByRole("button", { name: "Admin Mode", exact: true })
-      .waitFor();
-    await page
-      .getByRole("button", { name: "Close Manage", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
     assert.equal(
       await page.locator(".live-side.left .live-score").innerText(),
       "4",
@@ -746,8 +897,7 @@ try {
       "mobile has no horizontal overflow",
     );
     await page.getByRole("button", { name: "Manage", exact: true }).click();
-    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-    await page.getByRole("button", { name: "Card penalty…" }).click();
+    await page.getByRole("button", { name: "Penalty on Ari" }).click();
     await page.getByRole("button", { name: "Power", exact: true }).click();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(
@@ -759,20 +909,24 @@ try {
       1,
       "cancel awards nothing",
     );
-    await page
-      .getByRole("button", { name: "Cancel / discard", exact: true })
-      .click();
     page.once("dialog", (d) => d.accept());
     await page
       .getByRole("button", { name: "Match Complete", exact: true })
       .click();
     await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Resume", exact: true }).click();
     await page
       .getByRole("button", { name: "Match Report", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Match Report", exact: true })
       .waitFor();
+    await page.getByRole("img", { name: /Score progression/ }).waitFor();
+    assert.match(await page.locator(".report-breakdown").innerText(), /Other/);
+    await page.screenshot({
+      path: "test-results/report-mobile.png",
+      fullPage: true,
+    });
     const official = (
       await q("select * from public.\"vMatchResults\" where left_name='Ari'")
     )[0];
@@ -781,42 +935,72 @@ try {
     assert.equal(official.winner_side, "left");
     assert.ok(official.finalized_at);
     await page.reload();
-    await page.getByRole("button", { name: "Manage", exact: true }).waitFor();
+    await page
+      .getByRole("button", { name: "Match Report", exact: true })
+      .waitFor();
     assert.equal(
       await page.locator(".live-side.left .live-score").innerText(),
       "4",
     );
     // Abandon exits the fullscreen scoreboard; it never voids the saved bout.
-    await page.getByRole("button", { name: "Manage", exact: true }).click();
-    await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-    const abandon = page.getByRole("button", { name: "Abandon Match", exact: true });
+    await page
+      .getByRole("button", { name: "Match Report", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Edit Match", exact: true }).click();
+    const abandon = page.getByRole("button", {
+      name: "Abandon Match",
+      exact: true,
+    });
     await abandon.waitFor({ state: "visible" });
     page.once("dialog", (dialog) => dialog.dismiss());
     await abandon.click();
-    assert.equal(await page.locator("dialog[open]").count(), 1,
-      "Declining Abandon Match must keep the current Admin Mode");
+    assert.equal(
+      await page
+        .getByRole("heading", { name: "Admin Mode", exact: true })
+        .count(),
+      1,
+      "Declining Abandon Match must keep the current Admin Mode",
+    );
     page.once("dialog", (dialog) => dialog.accept());
     await abandon.click();
     await page.waitForURL("**/#/");
     const savedBout = (
-      await q("select id,is_void,finalized_at,left_score,right_score from public.\"vMatchResults\" where left_name='Ari'")
+      await q(
+        "select id,is_void,finalized_at,left_score,right_score from public.\"vMatchResults\" where left_name='Ari'",
+      )
     )[0];
     assert.equal(savedBout.is_void, false, "Abandon must not void the bout");
-    assert.ok(savedBout.finalized_at, "Abandon must retain historical finalization");
+    assert.ok(
+      savedBout.finalized_at,
+      "Abandon must retain historical finalization",
+    );
     assert.equal(savedBout.left_score, 4);
     assert.equal(savedBout.right_score, 3);
     await page.goto("http://127.0.0.1:5187/#/single-match");
-    await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
+    await page
+      .getByRole("heading", { name: "Match Prep", exact: true })
+      .waitFor();
     await page.goto("http://127.0.0.1:5187/#/history/matches");
-    await page.getByRole("combobox", { name: "Match order" }).selectOption("oldest");
-    await page.getByRole("combobox", { name: "Match order" }).selectOption("newest");
-    const savedHistoryRow = page.getByRole("button")
+    await page
+      .getByRole("combobox", { name: "Match order" })
+      .selectOption("oldest");
+    await page
+      .getByRole("combobox", { name: "Match order" })
+      .selectOption("newest");
+    const savedHistoryRow = page
+      .getByRole("button")
       .filter({ hasText: "Ari Wins" });
     await savedHistoryRow.waitFor();
-    assert.deepEqual(await savedHistoryRow.locator(".match-winner").allTextContents(),
-      ["Ari", "4"], "History highlights only the adjudicated winner and their score");
-    assert.match(await savedHistoryRow.locator(".match-history-score").innerText(),
-      /\[\s*4\s+to\s+3\s*\]/, "History preserves effective numeric totals");
+    assert.deepEqual(
+      await savedHistoryRow.locator(".match-winner").allTextContents(),
+      ["Ari", "4"],
+      "History highlights only the adjudicated winner and their score",
+    );
+    assert.match(
+      await savedHistoryRow.locator(".match-history-score").innerText(),
+      /\[\s*4\s+to\s+3\s*\]/,
+      "History preserves effective numeric totals",
+    );
     assert.deepEqual(errors, []);
     console.log(
       "PASS browser → API → PostgreSQL → UI: fencer create/edit/archive/cancel, prep, stopped timer, fixed quick scores, running scoring disabled, staged admin/time/target, penalty retry and cancel, manual completion/report/reload, confirmed Abandon Match exit with preserved results, desktop/mobile.",
@@ -863,20 +1047,31 @@ try {
   });
   await page.getByAltText("Processed image preview", { exact: true }).waitFor();
   await page.getByText(/512 × 256 px/).waitFor();
-  await page.getByRole("combobox", { name: "Maximum size" }).selectOption("256");
+  await page
+    .getByRole("combobox", { name: "Maximum size" })
+    .selectOption("256");
   await page.getByText(/256 × 128 px/).waitFor();
-  const firstPreviewUrl = await page.getByAltText("Processed image preview").getAttribute("src");
+  const firstPreviewUrl = await page
+    .getByAltText("Processed image preview")
+    .getAttribute("src");
   await page.getByRole("combobox", { name: "Quality" }).selectOption("0.9");
-  await page.waitForFunction(
-    (previous) => {
-      const img = document.querySelector('img[alt="Processed image preview"]');
-      return Boolean(img?.getAttribute("src") && img.getAttribute("src") !== previous);
-    },
-    firstPreviewUrl,
-  );
+  await page.waitForFunction((previous) => {
+    const img = document.querySelector('img[alt="Processed image preview"]');
+    return Boolean(
+      img?.getAttribute("src") && img.getAttribute("src") !== previous,
+    );
+  }, firstPreviewUrl);
   await page.getByText("Preview automatically updated.").waitFor();
-  assert.equal(await page.getByRole("button", { name: "Update preview" }).count(), 0);
-  assert.equal(await page.getByRole("button", { name: "Approve preview and upload" }).isEnabled(), true);
+  assert.equal(
+    await page.getByRole("button", { name: "Update preview" }).count(),
+    0,
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Approve preview and upload" })
+      .isEnabled(),
+    true,
+  );
   assert.equal(
     (await q('select count(*)::int n from public."tImageAsset"'))[0].n,
     0,
@@ -890,7 +1085,10 @@ try {
     .getByRole("alert")
     .filter({ hasText: /Failed to send|fetch|request/i })
     .waitFor();
-  await page.locator(".notice-error").filter({ hasText: /Failed to send|fetch|request/i }).waitFor();
+  await page
+    .locator(".notice-error")
+    .filter({ hasText: /Failed to send|fetch|request/i })
+    .waitFor();
   await page.getByAltText("Processed image preview", { exact: true }).waitFor();
   await page
     .getByRole("button", { name: "Approve preview and upload", exact: true })
@@ -906,8 +1104,8 @@ try {
   assert.equal(browserTeam.event_id, teamEvent.id);
   assert.equal(browserTeam.team_color_hex, "#1a2b3c");
   const image = (await q('select * from public."tImageAsset"'))[0];
-  assert.equal(image.width, 512);
-  assert.equal(image.height, 256);
+  assert.equal(image.width, 256);
+  assert.equal(image.height, 128);
   assert.equal(imageObjects.size, 1, "retry reuses one stored object");
   await page
     .getByRole("row")
@@ -969,7 +1167,7 @@ try {
     `http://127.0.0.1:5187/#/events/teams?mode=edit&id=${cloned.id}`,
   );
   await page.getByLabel("Color hex", { exact: true }).fill("#eeffee");
-  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
   await page
     .getByRole("row")
     .filter({ hasText: "Browser cloned team" })
@@ -1024,11 +1222,17 @@ try {
     )[0].is_archived,
     true,
   );
-  await page.goto(`http://127.0.0.1:5187/#/configuration/team-images?mode=archive&id=${image.id}`);
+  await page.goto(
+    `http://127.0.0.1:5187/#/configuration/team-images?mode=archive&id=${image.id}`,
+  );
   await page.getByRole("heading", { name: "Confirm Image Restore" }).waitFor();
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
   assert.equal(
-    (await q('select is_archived from public."tImageAsset" where id=$1', [image.id]))[0].is_archived,
+    (
+      await q('select is_archived from public."tImageAsset" where id=$1', [
+        image.id,
+      ])
+    )[0].is_archived,
     true,
     "Cancelling image restore must preserve archived status",
   );
@@ -1037,13 +1241,52 @@ try {
   console.log(
     "PASS team/image browser → real handler/decoder → PostgreSQL → UI: canvas optimization, preview approval, lost upload response, shared logos, clone rosters/lineage, independent colors, event-side assignment, archival retention and mobile layout.",
   );
+  // Saving one configuration section must not overwrite another dirty section.
+  await page.goto("http://127.0.0.1:5187/#/configuration/general");
+  const reasons = page.getByLabel("Selectable reason tiles");
+  await reasons.fill("Safety\nPower\nUnapplied reason");
+  await page
+    .getByRole("button", { name: "Save ranking rules", exact: true })
+    .click();
+  await page.locator(".notice-success").filter({ hasText: "Saved." }).waitFor();
+  assert.equal(await reasons.inputValue(), "Safety\nPower\nUnapplied reason");
+  assert.equal(
+    (
+      await q('select penalty_reasons from public."tConfiguration"')
+    )[0].penalty_reasons.includes("Unapplied reason"),
+    false,
+  );
+  await page.goto("http://127.0.0.1:5187/#/configuration/key-mappings");
+  await page.getByLabel("Shortcut left.clean.3", { exact: true }).fill("x");
+  await page.getByLabel("Shortcut right.clean.3", { exact: true }).fill("x");
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "Each shortcut must be unique" })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Save shared mappings", exact: true })
+      .isDisabled(),
+    true,
+  );
+  console.log(
+    "PASS: Configuration section saves preserve other dirty input; keyboard collisions block saving.",
+  );
   // Full-release-only navigation/dismissal verification reuses the same
   // authenticated Playwright + disposable PostgreSQL fixture.
-  if (process.env.SCOREKEEPER_FULL_RELEASE_NAV === "1" && !process.env.TEAM_ONLY) {
-    const { runNavigationReleaseAudit } = await import("./navigation-release.mjs");
+  if (
+    process.env.SCOREKEEPER_FULL_RELEASE_NAV === "1" &&
+    !process.env.TEAM_ONLY
+  ) {
+    const { runNavigationReleaseAudit } = await import(
+      "./navigation-release.mjs"
+    );
     const oneId = async (table, name) => {
       const field = table === "tFencer" ? "display_name" : "name";
-      const result = await q(`select id from public."${table}" where "${field}"=$1`, [name]);
+      const result = await q(
+        `select id from public."${table}" where "${field}"=$1`,
+        [name],
+      );
       assert.equal(result.length, 1, `Missing navigation fixture: ${name}`);
       return result[0].id;
     };
@@ -1059,11 +1302,37 @@ try {
         eventId: teamEvent.id,
         teamId: cloned.id,
         imageId: image.id,
-        matchId: (await q("select id from public.\"vMatchResults\" where left_name='Ari'"))[0].id,
+        expireRefereeClaim: async () => {
+          await root();
+          await db.exec(
+            `do $$ declare m public."tTraditionalMatch"; begin select * into m from public."tTraditionalMatch" where left_name='Ari'; perform set_config('scorekeeper.claim',coalesce(m.lease_token::text,''),true);update public."tTraditionalMatch" set lease_until=now()-interval '1 second' where id=m.id;end $$;`,
+          );
+          await auth(admin);
+        },
+        matchId: (
+          await q(
+            "select id from public.\"vMatchResults\" where left_name='Ari'",
+          )
+        )[0].id,
       },
     });
-    assert.deepEqual(errors, [], "Navigation audit triggered a browser runtime error");
+    assert.deepEqual(
+      errors,
+      [],
+      "Navigation audit triggered a browser runtime error",
+    );
   }
+} catch (e) {
+  for (const p of browser.contexts().flatMap((c) => c.pages())) {
+    console.error(
+      "BROWSER FAILURE:",
+      p.url(),
+      await p.locator("body").innerText(),
+      await p.locator("label").evaluateAll((es) => es.map((e) => e.outerHTML)),
+    );
+    await p.screenshot({ path: "test-results/failure.png", fullPage: true });
+  }
+  throw e;
 } finally {
   await browser.close();
   dev.kill();

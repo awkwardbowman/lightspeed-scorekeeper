@@ -2,6 +2,7 @@ process.on("uncaughtException", (e) => {
   console.error(e.message, e.detail ?? "", e.hint ?? "", e.query ?? "");
   process.exit(1);
 });
+import { transform } from "esbuild";
 import { PGlite } from "@electric-sql/pglite";
 import { readFile, readdir } from "node:fs/promises";
 import assert from "node:assert/strict";
@@ -42,10 +43,27 @@ await db.query(
   'insert into public."tFencer"(id,owner_id,display_name) values($1,$2,$3)',
   [preserved, admin, "Existing fencer"],
 );
-const legacyMatch=randomUUID(),legacyCall=randomUUID(),legacyOther=randomUUID();
-await db.query('insert into public."tFencer"(id,owner_id,display_name) values($1,$2,\'Legacy opponent\')',[legacyOther,admin]);
-await db.query('insert into public."tTraditionalMatch"(id,owner_id,left_fencer_id,right_fencer_id,phase,started_at,remaining_ms) values($1,$2,$3,$4,\'running\',now(),123456)',[legacyMatch,admin,preserved,legacyOther]);
-await db.query('insert into public."tTraditionalCall"(id,match_id,side,call_type,points,match_time_ms) values($1,$2,\'left\',\'counter\',5,150000)',[legacyCall,legacyMatch]);
+const legacyMatch = randomUUID(),
+  legacyCall = randomUUID(),
+  legacyOther = randomUUID();
+await db.query(
+  "insert into public.\"tFencer\"(id,owner_id,display_name) values($1,$2,'Legacy opponent')",
+  [legacyOther, admin],
+);
+await db.query(
+  "insert into public.\"tTraditionalMatch\"(id,owner_id,left_fencer_id,right_fencer_id,phase,started_at,remaining_ms) values($1,$2,$3,$4,'running',now(),123456)",
+  [legacyMatch, admin, preserved, legacyOther],
+);
+await db.query(
+  "insert into public.\"tTraditionalCall\"(id,match_id,side,call_type,points,match_time_ms) values($1,$2,'left','counter',5,150000)",
+  [legacyCall, legacyMatch],
+);
+const legacyEvent = randomUUID();
+await db.query(
+  `insert into public."tEvent"(id,owner_id,name,mode,starts_at,ends_at) values($1,$2,'Legacy dates','traditional','2026-11-06 01:30:00+00','2026-11-07 23:30:00+00')`,
+  [legacyEvent, admin],
+);
+await db.exec("set timezone='Pacific/Auckland'");
 for (const file of (
   await readdir(new URL("../supabase/migrations", import.meta.url))
 ).sort()) {
@@ -114,10 +132,54 @@ assert.equal(
   false,
   "operation API is security invoker",
 );
-assert.equal((await q('select phase from public."tTraditionalMatch" where id=$1',[legacyMatch]))[0].phase,'paused','legacy running snapshot recovers paused');
-assert.equal((await q('select remaining_ms from public."tTraditionalMatch" where id=$1',[legacyMatch]))[0].remaining_ms,123456);
-assert.equal((await q('select left_score from public."vMatchResults" where id=$1',[legacyMatch]))[0].left_score,5,'legacy call score preserved without double counting');
-assert.equal((await q('select data from public."tMatchOperation" where id=$1',[legacyCall]))[0].data.snapshotUnavailable,true,'missing original snapshots are labeled rather than fabricated');
+assert.equal(
+  (
+    await q('select phase from public."tTraditionalMatch" where id=$1', [
+      legacyMatch,
+    ])
+  )[0].phase,
+  "paused",
+  "legacy running snapshot recovers paused",
+);
+assert.equal(
+  (
+    await q('select remaining_ms from public."tTraditionalMatch" where id=$1', [
+      legacyMatch,
+    ])
+  )[0].remaining_ms,
+  123456,
+);
+assert.equal(
+  (
+    await q('select left_score from public."vMatchResults" where id=$1', [
+      legacyMatch,
+    ])
+  )[0].left_score,
+  5,
+  "legacy call score preserved without double counting",
+);
+assert.equal(
+  (
+    await q('select data from public."tMatchOperation" where id=$1', [
+      legacyCall,
+    ])
+  )[0].data.snapshotUnavailable,
+  true,
+  "missing original snapshots are labeled rather than fabricated",
+);
+const migratedDate = (
+  await q(
+    `select start_date::text d,end_date::text e,extract(hour from starts_at at time zone 'UTC') h from public."tEvent" where id=$1`,
+    [legacyEvent],
+  )
+)[0];
+assert.equal(migratedDate.d, "2026-11-06");
+assert.equal(migratedDate.e, "2026-11-07");
+assert.equal(
+  Number(migratedDate.h),
+  1,
+  "source timestamp retained; session timezone does not shift dates",
+);
 const unreg = (
   await q('select id from public."tFencer" where is_unregistered')
 )[0].id;
@@ -331,6 +393,107 @@ await reject(
   [m.id],
   /versioned|claim/,
 );
+
+// PR #8: independently applied regions preserve other values and finalize
+// explicit outcomes without needing a separate complete command.
+const partial = await create("standard", 180000, 12);
+await partial.cmd("score", { side: "left", type: "counter", points: 5 });
+await partial.cmd("admin", { leftScore: 3 });
+assert.equal((await partial.state()).right_score, 0);
+assert.equal((await partial.state()).remaining_ms, 180000);
+assert.equal((await partial.state()).target_score, 12);
+const noOpRevision = partial.revision;
+await partial.cmd("admin", { leftScore: 3 });
+assert.equal(
+  partial.revision,
+  noOpRevision,
+  "unchanged correction produces no audit/revision",
+);
+await partial.cmd("admin", { outcome: "right" });
+const declared = await partial.state();
+assert.ok(declared.finalized_at, "winner confirmation immediately finalizes");
+assert.equal(
+  declared.winner_side,
+  "right",
+  "explicit winner beats numeric score",
+);
+await partial.cmd("admin", { remainingMs: 200000 });
+assert.equal(
+  (await partial.state()).winner_side,
+  "right",
+  "timer Apply preserves outcome",
+);
+assert.equal(
+  String((await partial.state()).finalized_at),
+  String(declared.finalized_at),
+  "correction preserves finalization timestamp",
+);
+await partial.cmd("admin", { outcome: "incomplete" });
+assert.equal((await partial.state()).finalized_at, null);
+assert.equal((await partial.state()).remaining_ms, 200000);
+await assert.rejects(() => partial.cmd("admin", { leftScore: null }), /bounds/);
+const typedPreset = randomUUID();
+await db.query(
+  `insert into public."tMatchPreset"(id,owner_id,name,match_type,duration_ms,target_score) values($1,$2,'Knockout preset','knockout',120000,9)`,
+  [typedPreset, manager],
+);
+const typed = await create();
+await assert.rejects(
+  () =>
+    typed.cmd("prepare", {
+      leftFencerId: unreg,
+      rightFencerId: unreg,
+      leftName: "A",
+      rightName: "B",
+      presetId: typedPreset,
+      durationMs: 180000,
+      targetScore: 9,
+      matchType: "knockout",
+    }),
+  /Preset settings changed/,
+);
+await typed.cmd("prepare", {
+  leftFencerId: unreg,
+  rightFencerId: unreg,
+  leftName: "A",
+  rightName: "B",
+  presetId: typedPreset,
+  durationMs: 120000,
+  targetScore: 9,
+  matchType: "knockout",
+});
+assert.equal((await typed.state()).match_type, "knockout");
+await db.query(
+  `update public."tMatchPreset" set match_type='standard' where id=$1`,
+  [typedPreset],
+);
+assert.equal(
+  (await typed.state()).match_type,
+  "knockout",
+  "preset edits cannot rewrite effective match snapshot",
+);
+const dateEvent = randomUUID();
+await db.query(
+  `insert into public."tEvent"(id,owner_id,name,mode,start_date,end_date) values($1,$2,'Calendar event','traditional','2026-11-06','2026-11-07')`,
+  [dateEvent, manager],
+);
+await reject(
+  `update public."tEvent" set end_date='2026-11-05' where id=$1`,
+  [dateEvent],
+  /End Date/,
+);
+assert.equal(
+  (
+    await q('select start_date::text d from public."tEvent" where id=$1', [
+      dateEvent,
+    ])
+  )[0].d,
+  "2026-11-06",
+);
+console.log(
+  "PASS: partial Admin Apply, no-op suppression, immediate adjudication, finalization provenance, preset snapshots and calendar dates.",
+);
+
 const targetMatch = await create("standard", 180000, 3);
 await targetMatch.cmd("score", { side: "right", type: "clean", points: 3 });
 assert.equal((await targetMatch.state()).outcome, "result");
@@ -375,6 +538,61 @@ await unresolved.cmd("admin", {
 });
 assert.equal((await unresolved.state()).winner_side, "left");
 assert.ok((await unresolved.state()).finalized_at);
+
+// Report calculations consume real saved operations: penalty +3 and correction
+// -2 remain Other, while reversal drops ordinary call points from net breakdown.
+const transformed = await transform(
+  await readFile(new URL("../src/reportModel.ts", import.meta.url), "utf8"),
+  { loader: "ts", format: "esm" },
+);
+const { reportModel } = await import(
+  `data:text/javascript;base64,${Buffer.from(transformed.code).toString("base64")}`
+);
+const reportMatch = await create();
+const hit = await reportMatch.cmd("score", {
+  side: "left",
+  points: 5,
+  type: "counter",
+});
+await reportMatch.cmd("penalty", {
+  side: "right",
+  points: 3,
+  card: "Yellow",
+  reason: "Safety",
+});
+await reportMatch.cmd("admin", { leftScore: 6 });
+await reportMatch.cmd("reverse", { operationId: hit });
+await reportMatch.cmd("admin", { outcome: "right" });
+const reportOps = await q(
+  'select * from public."tMatchOperation" where match_id=$1 order by sequence',
+  [reportMatch.id],
+);
+const rm = reportModel(reportOps, 1, 0);
+assert.deepEqual(
+  rm.breakdown.Other,
+  [1, 0],
+  "+3 penalty and -2 correction reconcile",
+);
+assert.deepEqual(rm.breakdown["+5"], [0, 0], "reversed call excluded");
+assert.ok(rm.reconciled && rm.graphReconciled);
+assert.equal(
+  rm.progression.at(-2).left,
+  1,
+  "reversal retained as a drop in chronology",
+);
+const legacyOps = await q(
+  'select * from public."tMatchOperation" where match_id=$1',
+  [legacyMatch],
+);
+assert.equal(
+  reportModel(legacyOps, 5, 0).unavailable,
+  true,
+  "missing legacy snapshots explicitly signaled",
+);
+console.log(
+  "PASS: report categorization, signed corrections, reversed-call exclusion, progression reconciliation and legacy gaps.",
+);
+
 // Views all use adjusted totals and adjudication, including a draw at unequal scores.
 const f1 = randomUUID(),
   f2 = randomUUID();

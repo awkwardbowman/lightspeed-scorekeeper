@@ -3,6 +3,7 @@ import { useAccount } from "./Auth";
 import { manage, rpc, write, type EventRecord, type Preset } from "./data";
 import { Intro, Notice, useAction, useRows, DeleteButton } from "./ui";
 import { EventTeamAssignments } from "./Teams";
+import { CopyId } from "./Images";
 import { Registration } from "./Events";
 
 type Entity = "fencers" | "presets" | "users" | "events" | "teams";
@@ -41,6 +42,15 @@ const definitions: Record<
     fields: [
       { key: "name", label: "Name", required: true },
       {
+        key: "match_type",
+        label: "Match Type",
+        required: true,
+        options: [
+          ["standard", "Standard"],
+          ["knockout", "Knockout"],
+        ],
+      },
+      {
         key: "duration_ms",
         label: "Duration (seconds)",
         type: "number",
@@ -59,6 +69,7 @@ const definitions: Record<
     defaults: {
       name: "",
       mode: "traditional",
+      match_type: "standard",
       duration_ms: 180000,
       target_score: null,
     },
@@ -94,8 +105,8 @@ const definitions: Record<
         ],
       },
       { key: "preset_id", label: "Default preset", options: [] },
-      { key: "starts_at", label: "Start (UTC)", type: "datetime-local" },
-      { key: "ends_at", label: "End (UTC)", type: "datetime-local" },
+      { key: "start_date", label: "Start Date", type: "date" },
+      { key: "end_date", label: "End Date", type: "date" },
       { key: "description", label: "Description", type: "textarea" },
     ],
     defaults: {
@@ -103,8 +114,8 @@ const definitions: Record<
       mode: "traditional",
       competition_format: "individual",
       preset_id: null,
-      starts_at: null,
-      ends_at: null,
+      start_date: null,
+      end_date: null,
       description: "",
     },
   },
@@ -185,7 +196,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
           .includes(search.toLowerCase()));
   const totalCount = r.data.filter(allowed).length;
   const matchingCount = r.data.filter(allowed).filter(matchesFilters).length;
-  const filtersChanged = Boolean(search || affiliation) || status !== "active" || sort !== "name";
+  const filtersChanged =
+    Boolean(search || affiliation) || status !== "active" || sort !== "name";
   const clearFilters = () => {
     setSearch("");
     setAffiliation("");
@@ -208,7 +220,7 @@ export function RecordPage({ entity }: { entity: Entity }) {
       : mode === "create"
         ? entity === "users"
           ? "Invite user"
-          : `Create ${def.name}`
+          : `Create ${titleCase(def.name)}`
         : mode === "edit"
           ? `Edit ${def.name}`
           : mode === "archive"
@@ -217,17 +229,23 @@ export function RecordPage({ entity }: { entity: Entity }) {
               ? `Confirm ${entity === "users" ? "enable" : "restore"} ${def.name}`
               : mode === "relationships"
                 ? `Manage ${def.name} relationships`
-                : `Manage ${entity}`;
+                : mode === "detail"
+                  ? "Event Details"
+                  : `Manage ${entity}`;
   return (
     <>
-      <Intro title={title} />
+      <Intro title={titleCase(title)} />
       <Notice error={r.error || presets.error} loading={r.loading} />
-      {notice && <p role="status" className="notice-feedback notice-success">{notice}</p>}
+      {notice && (
+        <p role="status" className="notice-feedback notice-success">
+          {notice}
+        </p>
+      )}
       {mode === "lookup" ? (
         <section className="card record-lookup">
           <div className="button-row">
             <a className="primary" href={href("create")}>
-              New {def.name}
+              New {titleCase(def.name)}
             </a>
             {entity === "events" && <a href="#/events/teams">Manage teams</a>}
           </div>
@@ -259,7 +277,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 onChange={(e) => setStatus(e.target.value)}
               >
                 <option value="active">Active</option>
-                <option value="inactive">{entity === "users" ? "Disabled" : "Archived"}</option>
+                <option value="inactive">
+                  {entity === "users" ? "Disabled" : "Archived"}
+                </option>
                 <option value="all">All</option>
               </select>
             </label>
@@ -278,7 +298,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
           </div>
           <div className="record-result-summary">
             <span role="status">
-              {r.loading ? "Loading records…" : `Showing ${matchingCount} of ${totalCount} records`}
+              {r.loading
+                ? "Loading records…"
+                : `Showing ${matchingCount} of ${totalCount} records`}
             </span>
             {filtersChanged && (
               <button type="button" className="subtle" onClick={clearFilters}>
@@ -324,20 +346,33 @@ export function RecordPage({ entity }: { entity: Entity }) {
                   .map((x) => (
                     <tr key={x.id}>
                       <td>
-                        <small title={x.id}>{x.id.slice(0, 8)}</small>
+                        <CopyId id={x.id} />
                       </td>
-                      <td>{name(x)}</td>
+                      <td>
+                        {entity === "events" ? (
+                          <a href={href("detail", x.id)}>{name(x)}</a>
+                        ) : (
+                          name(x)
+                        )}
+                      </td>
                       {entity === "users" ? (
                         <>
                           <td>{String(x.email ?? "")}</td>
-                          <td>{String(x.app_role ?? "").replace(/^./, (letter) => letter.toUpperCase())}</td>
+                          <td>
+                            {String(x.app_role ?? "").replace(/^./, (letter) =>
+                              letter.toUpperCase(),
+                            )}
+                          </td>
                         </>
                       ) : (
                         <td>
                           {entity === "fencers"
                             ? String(x.affiliation ?? "")
                             : String(x.mode ?? "")}
-                          {entity === "events" && ` · ${x.competition_format}`}
+                          {entity === "presets" &&
+                            ` · ${x.match_type === "knockout" ? "Knockout" : "Standard"} · ${Number(x.duration_ms) / 1000}s · ${x.target_score ?? "No Target"}`}
+                          {entity === "events" &&
+                            ` · ${x.competition_format} · ${displayDate(x.start_date)} – ${displayDate(x.end_date)}`}
                         </td>
                       )}
                       <td>
@@ -371,7 +406,9 @@ export function RecordPage({ entity }: { entity: Entity }) {
                           )}
                           {(entity === "events" || entity === "teams") && (
                             <a href={href("relationships", x.id)}>
-                              {x.competition_format === "team" ? "Team Assignments" : "Registrations"}
+                              {x.competition_format === "team"
+                                ? "Team Assignments"
+                                : "Registrations"}
                             </a>
                           )}
                         </div>
@@ -382,16 +419,16 @@ export function RecordPage({ entity }: { entity: Entity }) {
             </table>
           </div>
           {!r.loading && !r.error && matchingCount === 0 && (
-              <p role="status">
-                {totalCount === 0
-                  ? "No records yet."
-                  : "No records match your filters."}
-              </p>
-            )}
+            <p role="status">
+              {totalCount === 0
+                ? "No records yet."
+                : "No records match your filters."}
+            </p>
+          )}
         </section>
       ) : mode === "create" || selected ? (
         <section className="card">
-          {mode === "relationships" && (
+          {(mode === "relationships" || mode === "detail") && (
             <a href={`#${base}`}>← Back to lookup</a>
           )}
           {mode === "create" || mode === "edit" ? (
@@ -484,6 +521,53 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 )
               }
             />
+          ) : mode === "detail" && selected && entity === "events" ? (
+            <section>
+              <h3>{name(selected)}</h3>
+              <p>
+                {String(selected.status)} · {displayDate(selected.start_date)} –{" "}
+                {displayDate(selected.end_date)}
+              </p>
+              <p>{String(selected.description ?? "")}</p>
+              {(selected.mode !== "traditional" ||
+                selected.competition_format === "team") && (
+                <p>
+                  Planning Only: match execution and standings for this format
+                  are not available.
+                </p>
+              )}
+              <nav className="button-row" aria-label="Event Management">
+                <a className="secondary" href={href("edit", id)}>
+                  Edit Event
+                </a>
+                <a className="secondary" href={href("relationships", id)}>
+                  {selected.competition_format === "team"
+                    ? "Team Assignments"
+                    : "Registrations"}
+                </a>
+                {selected.mode === "traditional" &&
+                  selected.competition_format === "individual" &&
+                  [
+                    ["/run-event", "Phases and Groups"],
+                    ["/run-event/bracket", "Bracket"],
+                    ["/run-event/matches", "Matches"],
+                    ["/run-event/standings", "Standings"],
+                  ].map(([route, label]) => (
+                    <a
+                      className="secondary"
+                      key={route}
+                      href={`#${route}`}
+                      onClick={() => sessionStorage.setItem("event", id)}
+                    >
+                      {label}
+                    </a>
+                  ))}
+              </nav>
+              <EventStatus
+                event={selected as unknown as EventRecord}
+                onDone={r.reload}
+              />
+            </section>
           ) : mode === "relationships" && selected ? (
             <>
               <h3>{name(selected)}</h3>
@@ -523,8 +607,8 @@ export function RecordPage({ entity }: { entity: Entity }) {
                 <h3>Danger Zone</h3>
                 <p>
                   Delete this user's account access only when disabling it is
-                  insufficient. This preserves historical attribution and requires
-                  a separate email-confirmation screen.
+                  insufficient. This preserves historical attribution and
+                  requires a separate email-confirmation screen.
                 </p>
                 <a className="danger" href={href("delete", id)}>
                   Delete Account Access…
@@ -577,6 +661,9 @@ function RecordForm({
     ...selected,
   }));
   const creating = !selected;
+  const dirty =
+    JSON.stringify(values) !== JSON.stringify({ ...def.defaults, ...selected });
+  const [validation, setValidation] = useState("");
   const base = entity === "teams" ? "/events/teams" : `/${entity}`;
   return (
     <form
@@ -584,6 +671,15 @@ function RecordForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!allowed) return;
+        if (
+          entity === "events" &&
+          values.start_date &&
+          values.end_date &&
+          String(values.end_date) < String(values.start_date)
+        ) {
+          setValidation("End Date must not be before Start Date.");
+          return;
+        }
         const v: Record<string, unknown> = {};
         for (const key of Object.keys(def.defaults)) v[key] = values[key];
         for (const key of ["name", "display_name"])
@@ -626,10 +722,8 @@ function RecordForm({
                 ? s === ""
                   ? null
                   : Number(s) * (f.key === "duration_ms" ? 1000 : 1)
-                : f.type === "datetime-local"
-                  ? s
-                    ? new Date(s + "Z").toISOString()
-                    : null
+                : f.type === "date"
+                  ? s || null
                   : f.key === "preset_id"
                     ? s || null
                     : s,
@@ -638,6 +732,7 @@ function RecordForm({
         if (f.options)
           input = (
             <select
+              aria-label={f.label}
               required={
                 f.required &&
                 !(creating && entity === "users" && f.key === "display_name")
@@ -657,6 +752,7 @@ function RecordForm({
         else if (f.type === "textarea")
           input = (
             <textarea
+              aria-label={f.label}
               disabled={disabled}
               value={String(value ?? "")}
               onChange={(e) => change(e.target.value)}
@@ -665,13 +761,16 @@ function RecordForm({
         else
           input = (
             <input
+              aria-label={f.label}
               required={
                 f.required &&
                 !(creating && entity === "users" && f.key === "display_name")
               }
               disabled={disabled}
               type={f.type ?? "text"}
-              min={f.min}
+              min={
+                f.key === "end_date" ? String(values.start_date ?? "") : f.min
+              }
               max={f.max}
               maxLength={f.type === "number" ? undefined : 160}
               value={
@@ -695,12 +794,22 @@ function RecordForm({
         <button className="primary" disabled={busy || !allowed}>
           {creating
             ? entity === "users"
-              ? "Send invitation"
-              : `Create ${def.name}`
-            : "Save changes"}
+              ? "Send Invitation"
+              : `Create ${titleCase(def.name)}`
+            : "Save Changes"}
         </button>
-        <a href={`#${base}`}>Cancel</a>
+        <a
+          className="secondary"
+          href={`#${base}`}
+          onClick={(e) => {
+            if (busy || (dirty && !confirm("Discard unsaved changes?")))
+              e.preventDefault();
+          }}
+        >
+          Cancel
+        </a>
       </div>
+      <Notice error={validation} />
     </form>
   );
 }
@@ -812,4 +921,13 @@ function DeleteUserAccess({
       </div>
     </section>
   );
+}
+
+function titleCase(s: string) {
+  return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+function displayDate(value: unknown) {
+  if (!value) return "Unscheduled";
+  const [year, month, day] = String(value).split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString();
 }

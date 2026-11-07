@@ -5,24 +5,42 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
 const components = [
-  "App", "Auth", "Configuration", "Events", "History", "Images",
-  "Management", "Pages", "RecordPages", "Scorekeeper", "Teams", "ui",
+  "App",
+  "Auth",
+  "Configuration",
+  "Events",
+  "History",
+  "Images",
+  "Management",
+  "Pages",
+  "RecordPages",
+  "Scorekeeper",
+  "Teams",
+  "ui",
   "MatchLog",
+  "AdminScoreboard",
+  "CardHistory",
+  "MatchReport",
 ];
 
 function jsxTag(node, source) {
-  return (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
+  return ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)
     ? node.tagName.getText(source)
     : null;
 }
 function hasAttribute(node, key) {
-  return node.attributes?.properties.some(
-    (p) => ts.isJsxAttribute(p) && p.name.text === key,
-  ) ?? false;
+  return (
+    node.attributes?.properties.some(
+      (p) => ts.isJsxAttribute(p) && p.name.text === key,
+    ) ?? false
+  );
 }
 function formAncestor(node, source) {
   for (let parent = node.parent; parent; parent = parent.parent) {
-    if (ts.isJsxElement(parent) && parent.openingElement.tagName.getText(source) === "form")
+    if (
+      ts.isJsxElement(parent) &&
+      parent.openingElement.tagName.getText(source) === "form"
+    )
       return true;
   }
   return false;
@@ -37,18 +55,28 @@ export async function auditDeclaredControls() {
   for (const name of components) {
     const path = new URL(`../src/${name}.tsx`, import.meta.url);
     const code = await readFile(path, "utf8");
-    const tree = ts.createSourceFile(path.pathname, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const tree = ts.createSourceFile(
+      path.pathname,
+      code,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
     assert.equal(tree.parseDiagnostics.length, 0, `JSX syntax in ${name}`);
     function visit(node) {
       const tag = jsxTag(node, tree);
       if (tag === "button") {
         counts.buttons++;
         if (!hasAttribute(node, "onClick") && !formAncestor(node, tree))
-          issues.push(`${name}:${tree.getLineAndCharacterOfPosition(node.pos).line + 1}: button has no handler or submit form`);
+          issues.push(
+            `${name}:${tree.getLineAndCharacterOfPosition(node.pos).line + 1}: button has no handler or submit form`,
+          );
       } else if (tag === "a") {
         counts.links++;
         if (!hasAttribute(node, "href"))
-          issues.push(`${name}:${tree.getLineAndCharacterOfPosition(node.pos).line + 1}: link has no destination`);
+          issues.push(
+            `${name}:${tree.getLineAndCharacterOfPosition(node.pos).line + 1}: link has no destination`,
+          );
       } else if (tag === "dialog") {
         counts.dialogs++;
         if (!hasAttribute(node, "onCancel"))
@@ -61,18 +89,31 @@ export async function auditDeclaredControls() {
     }
     visit(tree);
   }
-  assert.ok(counts.buttons >= 40 && counts.links >= 30, "Control inventory unexpectedly shrank");
+  assert.ok(
+    counts.buttons >= 40 && counts.links >= 30,
+    "Control inventory unexpectedly shrank",
+  );
   assert.deepEqual(issues, [], "Orphaned JSX controls:\n" + issues.join("\n"));
   return counts;
 }
 
 async function readRoutes() {
-  const src = await readFile(new URL("../src/navigation.ts", import.meta.url), "utf8");
+  const src = await readFile(
+    new URL("../src/navigation.ts", import.meta.url),
+    "utf8",
+  );
   const match = src.match(/export const ALL_ROUTES = \[([\s\S]*?)\] as const;/);
   assert.ok(match, "ALL_ROUTES registry is accessible");
   const routes = [...match[1].matchAll(/"(\/[^"]*)"/g)].map((x) => x[1]);
-  assert.equal(routes.length, new Set(routes).size, "Duplicate registered routes");
-  assert.ok(routes.includes("/history/matches") && routes.includes("/configuration/team-images"));
+  assert.equal(
+    routes.length,
+    new Set(routes).size,
+    "Duplicate registered routes",
+  );
+  assert.ok(
+    routes.includes("/history/matches") &&
+      routes.includes("/configuration/team-images"),
+  );
   return routes;
 }
 
@@ -91,13 +132,19 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
     await page.locator("main").waitFor();
     if (route !== "/single-match")
       await page.locator(".app-breadcrumb").waitFor({ state: "visible" });
-    const targets = await page.locator('a[href^="#/"]').evaluateAll((links) =>
-      links.filter((el) => el.getClientRects().length > 0)
-        .map((el) => el.getAttribute("href")),
-    );
+    const targets = await page
+      .locator('a[href^="#/"]')
+      .evaluateAll((links) =>
+        links
+          .filter((el) => el.getClientRects().length > 0)
+          .map((el) => el.getAttribute("href")),
+      );
     for (const target of targets) {
       const pathname = target.slice(1).split("?")[0].replace(/\/$/, "") || "/";
-      assert.ok(knownRoutes.has(pathname), `Dead link from ${route}: ${target}`);
+      assert.ok(
+        knownRoutes.has(pathname),
+        `Dead link from ${route}: ${target}`,
+      );
       internalLinks++;
     }
   }
@@ -105,13 +152,19 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   // Exercise every dashboard and submenu tile rather than just checking href.
   for (const route of ["/", "/history", "/configuration"]) {
     await navigate(route);
-    const targets = await page.locator(".nav-tile").evaluateAll((els) =>
-      els.map((el) => el.getAttribute("href")).filter(Boolean),
-    );
+    const targets = await page
+      .locator(".nav-tile")
+      .evaluateAll((els) =>
+        els.map((el) => el.getAttribute("href")).filter(Boolean),
+      );
     for (const href of targets) {
       await navigate(route);
       await page.locator(`.nav-tile[href="${href}"]`).click();
-      assert.equal(new URL(page.url()).hash, href, `Tile did not navigate: ${href}`);
+      assert.equal(
+        new URL(page.url()).hash,
+        href,
+        `Tile did not navigate: ${href}`,
+      );
     }
   }
 
@@ -139,10 +192,17 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
     const cancel = page.getByRole("link", { name: "Cancel", exact: true });
     await cancel.waitFor({ state: "visible" });
     assert.equal(await cancel.count(), 1, `Expected one Cancel for ${hash}`);
-    assert.equal(await page.getByRole("link", { name: /Back to lookup/i }).count(), 0,
-      `Duplicate Back/Cancel in ${hash}`);
+    assert.equal(
+      await page.getByRole("link", { name: /Back to lookup/i }).count(),
+      0,
+      `Duplicate Back/Cancel in ${hash}`,
+    );
     await cancel.click();
-    assert.equal(new URL(page.url()).hash, `#${route}`, `Cancel failed: ${hash}`);
+    assert.equal(
+      new URL(page.url()).hash,
+      `#${route}`,
+      `Cancel failed: ${hash}`,
+    );
   }
 
   // Cancel must also discard unsaved input, not just change the URL.
@@ -151,11 +211,18 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   await fencerName.waitFor({ state: "visible" });
   const originalName = await fencerName.inputValue();
   await fencerName.fill("UNSAVED NAVIGATION TEST — DO NOT STORE");
+  page.once("dialog", (d) => d.accept());
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Manage Fencers", exact: true })
+    .waitFor();
   await navigate(`/fencers?mode=edit&id=${fixtures.fencerId}`);
   await fencerName.waitFor({ state: "visible" });
-  assert.equal(await fencerName.inputValue(), originalName,
-    "Cancel must not persist unsaved form edits");
+  assert.equal(
+    await fencerName.inputValue(),
+    originalName,
+    "Cancel must not persist unsaved form edits",
+  );
 
   // Relationship page has only Back to lookup, not a duplicate Cancel.
   await navigate(`/events?mode=relationships&id=${fixtures.eventId}`);
@@ -166,7 +233,9 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   // "Clone previous team" link. Team editor, clone, archive, and history exits.
   await navigate("/events/teams?mode=clone");
   assert.equal(
-    await page.getByRole("link", { name: "Clone previous team", exact: true }).count(),
+    await page
+      .getByRole("link", { name: "Clone previous team", exact: true })
+      .count(),
     0,
     "Clone-source screen must not link to itself",
   );
@@ -191,55 +260,173 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   // level; the editor and its unsaved data must remain present.
   await navigate(`/events/teams?mode=edit&id=${fixtures.teamId}`);
   await page.getByRole("button", { name: "Choose logo", exact: true }).click();
-  await page.getByRole("button", { name: "Upload new image", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel upload", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel selection", exact: true }).click();
-  assert.equal(await page.locator('section[aria-label="Choose team logo"]').count(), 0);
+  await page
+    .getByRole("button", { name: "Upload new image", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Cancel upload", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Cancel selection", exact: true })
+    .click();
+  assert.equal(
+    await page.locator('section[aria-label="Choose team logo"]').count(),
+    0,
+  );
   assert.equal(await page.getByLabel("Team name", { exact: true }).count(), 1);
   await navigate("/configuration/team-images?mode=upload");
-  await page.getByRole("button", { name: "Cancel upload", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Cancel upload", exact: true })
+    .click();
   assert.equal(new URL(page.url()).hash, "#/configuration/team-images");
-  await navigate(`/configuration/team-images?mode=archive&id=${fixtures.imageId}`);
+  await navigate(
+    `/configuration/team-images?mode=archive&id=${fixtures.imageId}`,
+  );
   await page.getByRole("link", { name: "Cancel", exact: true }).click();
   assert.equal(new URL(page.url()).hash, "#/configuration/team-images");
 
   // Reopen the saved fixture bout after the normal browser test explicitly
   // abandoned the screen; Abandon must never delete or auto-reopen it.
   await navigate("/history/matches");
-  await page.evaluate((id) => sessionStorage.setItem("openMatch", id), fixtures.matchId);
+  await page.evaluate(
+    (id) => sessionStorage.setItem("openMatch", id),
+    fixtures.matchId,
+  );
   await navigate("/single-match");
-  // A real previously broken control: X / Escape on Manage while its nested
-  // Admin mode is displayed. A native confirm must protect staged changes.
-  await page.getByRole("button", { name: "Manage", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-  const closeManage = page.getByRole("button", { name: "Close Manage match" });
-  await closeManage.waitFor();
-  page.once("dialog", (prompt) => prompt.dismiss());
-  await closeManage.click();
-  assert.equal(await page.locator('dialog[open]').count(), 1,
-    "Rejecting the discard confirmation must preserve the Admin dialog");
-  page.once("dialog", (prompt) => prompt.accept());
-  await closeManage.click();
-  await page.locator('dialog[open]').waitFor({ state: "detached" });
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
-  await page.getByRole("button", { name: "Card penalty…" }).click();
-  await page.getByRole("button", { name: "Close Assign card penalty" }).click();
-  assert.equal(await page.locator('dialog[open]').count(), 1,
-    "Penalty X should close only the nested penalty dialog");
-  page.once("dialog", (prompt) => prompt.accept());
+  await page.getByRole("button", { name: "Match Report", exact: true }).click();
+  await page.getByRole("button", { name: "Edit Match", exact: true }).click();
+  assert.equal(
+    await page.locator("dialog[open]").count(),
+    0,
+    "Admin is a full-screen scoreboard, not a nested dialog",
+  );
+  await page
+    .getByRole("button", { name: "Increase Left score", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Stay in Admin Mode", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Admin Mode", exact: true })
+    .waitFor();
   await page.keyboard.press("Escape");
-  await page.locator('dialog[open]').waitFor({ state: "detached" });
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: "Admin Mode", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Discard and Resume", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Edit Match", exact: true }).click();
+  await fixtures.expireRefereeClaim();
+  await page
+    .getByRole("button", { name: "Recover Expired Claim", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Incomplete", exact: true })
+    .waitFor({ state: "visible" });
+  await page
+    .getByRole("status")
+    .filter({ hasText: "Referee claim recovered" })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Increase Right score", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Apply right score", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="Apply right score"]')?.disabled,
+  );
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Match Report", exact: true })
+    .waitFor();
+  assert.match(
+    await page.locator(".final-score").innerText(),
+    /4[\s\S]*4/,
+    "Report refreshes after a finalized score correction",
+  );
+  await page.getByRole("button", { name: "Edit Match", exact: true }).click();
+  // Every result choice is cancellable and leaves authoritative state alone.
+  for (const label of [
+    "Left Victory:",
+    "Tie",
+    "Incomplete",
+    "Right Victory:",
+  ]) {
+    await page
+      .getByRole("button", {
+        name:
+          label === "Tie" || label === "Incomplete" ? label : new RegExp(label),
+        exact: label === "Tie" || label === "Incomplete",
+      })
+      .click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  }
+  // Explicit Incomplete is the only route to reopening a finalized bout.
+  await page.getByRole("button", { name: "Incomplete", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Confirm Outcome", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Penalty on Ari", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Close Assign card penalty" }).click();
+  assert.equal(
+    await page.locator("dialog[open]").count(),
+    0,
+    "Penalty X closes its popup only",
+  );
+  await page
+    .getByRole("heading", { name: "Admin Mode", exact: true })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Penalty on Ari", exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await page.locator("dialog[open]").count(),
+    0,
+    "Penalty Escape closes its popup only",
+  );
+  await page.getByRole("button", { name: /Left Victory:/ }).click();
+  await page
+    .getByRole("button", { name: "Confirm Outcome", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Match Report", exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Edit Match", exact: true }).click();
   page.once("dialog", (prompt) => prompt.accept());
-  await page.getByRole("button", { name: "Abandon Match", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Abandon Match", exact: true })
+    .click();
   await page.waitForURL("**/#/");
   await navigate("/single-match");
-  await page.getByRole("heading", { name: "Match Prep", exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: "Match Prep", exact: true })
+    .waitFor();
 
+  // Target completion stays on the scoreboard and exposes a deliberate report.
+  await page.getByLabel("Participant name").nth(0).fill("Auto Left");
+  await page.getByLabel("Participant name").nth(1).fill("Auto Right");
+  await page.getByLabel("Preset", { exact: true }).selectOption("");
+  await page.getByLabel("Length (seconds)").fill("180");
+  await page.getByLabel("Match type", { exact: true }).selectOption("standard");
+  await page.getByLabel("Score to Win (blank for no target)").fill("1");
+  await page.getByRole("button", { name: "Start Match", exact: true }).click();
+  await page
+    .getByRole("button", { name: "left indirect +1", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Match Report", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Auto Left Wins", exact: true })
+    .waitFor();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "New Match", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Match Prep", exact: true })
+    .waitFor();
   console.log(
-    `PASS full-release navigation: ${routes.length} routes, ${internalLinks} visible internal links validated, ${counts.buttons} JSX buttons/${counts.links} links audited; Create/Edit/Archive/Restore/Delete Cancel, clone picker, team/image exits, nested penalty X, Manage X/Escape, Abandon Match return.`,
+    `PASS full-release navigation: ${routes.length} routes, ${internalLinks} visible internal links validated, ${counts.buttons} JSX buttons/${counts.links} links audited; Create/Edit/Archive/Restore/Delete Cancel, clone picker, team/image exits, penalty X/Escape, staged Resume choices, confirmed outcomes, expired referee recovery, refreshed report and Abandon Match return.`,
   );
 }
