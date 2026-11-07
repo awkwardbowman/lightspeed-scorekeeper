@@ -137,7 +137,7 @@ export default function Teams() {
         Each event entry has its own roster and appearance. Clone a previous
         team to continue its history.
       </Intro>
-      {notice && <p role="status">{notice}</p>}
+      {notice && <p role="status" className="notice-feedback notice-success">{notice}</p>}
       <Notice
         error={teams.error || events.error || assets.error || a.error}
         success={a.status}
