@@ -193,7 +193,7 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
     await cancel.waitFor({ state: "visible" });
     assert.equal(await cancel.count(), 1, `Expected one Cancel for ${hash}`);
     assert.equal(
-      await page.getByRole("link", { name: /Back to lookup/i }).count(),
+      await page.getByRole("link", { name: /Back$/i }).count(),
       0,
       `Duplicate Back/Cancel in ${hash}`,
     );
@@ -224,9 +224,9 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
     "Cancel must not persist unsaved form edits",
   );
 
-  // Relationship page has only Back to lookup, not a duplicate Cancel.
+  // Relationship page has only Back, not a duplicate Cancel.
   await navigate(`/events?mode=relationships&id=${fixtures.eventId}`);
-  await page.getByRole("link", { name: /Back to lookup/i }).click();
+  await page.getByRole("link", { name: /Back$/i }).click();
   assert.equal(new URL(page.url()).hash, "#/events");
 
   // Team source picker must have a working Cancel, not a self-referential
@@ -252,7 +252,7 @@ export async function runNavigationReleaseAudit({ page, baseUrl, fixtures }) {
   }
   for (const mode of ["roster", "history"]) {
     await navigate(`/events/teams?mode=${mode}&id=${fixtures.teamId}`);
-    await page.getByRole("link", { name: /Back to lookup/i }).click();
+    await page.getByRole("link", { name: /Back$/i }).click();
     assert.equal(new URL(page.url()).hash, "#/events/teams");
   }
 
